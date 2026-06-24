@@ -4,7 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f172a" />
-<title>Grace KPI 대시보드</title>
+<title>KPI 비서 대시보드</title>
+<!-- build: auto-deploy 2026-06-24 -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -660,12 +661,71 @@ function openKpiDetail(id){
     <div class="detail-sec"><h4>연결된 칸반 티켓 — 해야할것 ${tc("todo")} · 하는중 ${tc("doing")} · 완료 ${tc("done")}</h4>${tlist}</div>
     <div class="detail-sec"><h4>백로그 과제 (grace 주도)</h4>${bllist}</div>
     <div class="actions" style="display:flex; gap:8px; margin-top:18px">
-      <button onclick="location.href='kanban.html'">🗂 칸반에서 티켓 추가</button>
+      <button id="kpi-edit">✏️ 수정</button>
+      <button onclick="location.href='kanban.html'">🗂 칸반</button>
       <div style="flex:1"></div>
       <button class="primary" id="kpi-close">닫기</button>
     </div>`;
   openModal("#kpi-modal");
   $("#kpi-close").onclick=()=>closeModal("#kpi-modal");
+  $("#kpi-edit").onclick=()=>openKpiEdit(id);
+}
+
+function escRe(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,"\\$&"); }
+function openKpiEdit(id){
+  const k=STATE.kpis.find(x=>x.id===id); if(!k) return;
+  $("#kpi-modal-inner").innerHTML=`
+    <h3 style="margin:0 0 12px; font-size:15px">✏️ ${esc(k.id)} 수정</h3>
+    <label class="fld">제목</label>
+    <input id="ke-title" value="${esc(k.title)}" />
+    <label class="fld">현재값 <span class="small">(여러 항목은 ' · '로 구분하면 불릿 분리)</span></label>
+    <textarea id="ke-current">${esc(k.current)}</textarea>
+    <label class="fld">목표/측정지표</label>
+    <textarea id="ke-goal">${esc(k.goal)}</textarea>
+    <label class="fld">가중치 (1~5)</label>
+    <input id="ke-weight" type="number" min="1" max="5" value="${k.weight}" />
+    <label class="fld">진단·레버 메모 <span class="small">([진단][레버] 태그·①②③로 적으면 상세에서 불릿 정리됨)</span></label>
+    <textarea id="ke-memo" style="min-height:130px">${esc(k.memo)}</textarea>
+    <div class="actions" style="display:flex; gap:8px; margin-top:16px">
+      <button id="ke-cancel">취소</button>
+      <div style="flex:1"></div>
+      <button class="primary" id="ke-save">저장 &amp; 커밋</button>
+    </div>`;
+  $("#ke-cancel").onclick=()=>openKpiDetail(id);
+  $("#ke-save").onclick=()=>saveKpiEdit(id);
+}
+async function saveKpiEdit(id){
+  const fields={ title:$("#ke-title").value, current:$("#ke-current").value,
+    goal:$("#ke-goal").value, weight:$("#ke-weight").value, memo:$("#ke-memo").value };
+  const btn=$("#ke-save"); btn.disabled=true; btn.textContent="저장 중…";
+  try{ await saveKpi(id, fields); toast("✅ 저장 & 커밋됨"); await loadAll(); render(); openKpiDetail(id); }
+  catch(e){ toast("저장 실패: "+(e.message||e)); btn.disabled=false; btn.textContent="저장 & 커밋"; }
+}
+async function saveKpi(id, fields){
+  const sani=v=>String(v==null?"":v).replace(/\r?\n+/g," ").trim();
+  for(let attempt=0; attempt<3; attempt++){
+    const f=await getFile("assistant/kpi.md");
+    if(!f) throw new Error("kpi.md 없음");
+    const text=f.text;
+    const sm=new RegExp(`(^|\\n)##\\s+${escRe(id)}\\s*[:：]`).exec(text);
+    if(!sm) throw new Error(id+" 블록을 찾을 수 없음");
+    const start=sm.index + sm[1].length;
+    let end=text.indexOf("\n## ", start+3); if(end===-1) end=text.length;
+    let block=text.slice(start,end);
+    if(fields.title!=null) block=block.replace(/^[^\n]*/, ()=>`## ${id}: ${sani(fields.title)}`);
+    const setField=(label,val)=>{
+      if(val==null) return;
+      const fre=new RegExp("(\\n\\s*-\\s+\\*\\*"+escRe(label)+"\\*\\*\\s*[:：]\\s*)[^\\n]*");
+      if(fre.test(block)) block=block.replace(fre,(mm,p1)=>p1+sani(val));
+    };
+    setField("목표/측정지표", fields.goal);
+    setField("현재값", fields.current);
+    setField("가중치(1~5)", fields.weight);
+    setField("메모", fields.memo);
+    const newText=text.slice(0,start)+block+text.slice(end);
+    try{ await putFile("assistant/kpi.md", newText, `kpi: ${id} 상세 수정(대시보드)`, f.sha); return; }
+    catch(e){ if(e.status===409 && attempt<2) continue; throw e; }
+  }
 }
 
 function render(){

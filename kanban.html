@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f172a" />
 <title>개인 칸반보드 · KPI 비서</title>
+<!-- build: auto-deploy 2026-06-24 -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -367,6 +368,17 @@ function autoTitle(){
   const g=$("#t-goal").value.trim()||$("#t-problem").value.trim();
   return g.length>60?g.slice(0,58)+"…":g;
 }
+async function mutateTicket(path, mutator, msg){
+  // 항상 최신 sha로 기록해 409(sha 불일치) 방지. 원격 최신 내용에 변경만 재적용.
+  for(let attempt=0; attempt<3; attempt++){
+    const fresh=await getFile(path);
+    if(!fresh) throw new Error("티켓 파일을 찾을 수 없습니다");
+    const p=parseTicket(fresh.text,{sha:fresh.sha,path});
+    mutator(p);
+    try{ const res=await putFile(path, serialize(p), msg, fresh.sha); p.sha=res?.content?.sha; return p; }
+    catch(e){ if(e.status===409 && attempt<2) continue; throw e; }
+  }
+}
 async function saveTicket(){
   const btn=$("#t-save"); btn.disabled=true; btn.textContent="저장 중…";
   try{
@@ -375,8 +387,8 @@ async function saveTicket(){
       kpi:$("#t-kpi").value,requester:$("#t-requester").value.trim(),title:autoTitle()};
     if(!data.goal && !data.problem && !data.fact){toast("최소 한 항목은 입력하세요");return;}
     if(EDIT){
-      const t={...EDIT,...data,status:$("#t-status").value};
-      await putFile(t.path,serialize(t),`ticket: ${t.id} 갱신`,t.sha);
+      const st=$("#t-status").value;
+      await mutateTicket(EDIT.path, p=>{ Object.assign(p,data); p.status=st; }, `ticket: ${EDIT.id} 갱신`);
     }else{
       const id=genId();
       const t={id,status:"todo",created:today(),comments:[],...data};
@@ -388,22 +400,17 @@ async function saveTicket(){
 }
 async function moveTicket(id,status){
   const t=TICKETS.find(x=>x.id===id); if(!t)return;
-  try{ t.status=status; await putFile(t.path,serialize(t),`ticket: ${t.id} → ${status}`,t.sha); await refresh(); }
-  catch(e){toast("이동 실패: "+(e.message||e)); refresh();}
+  try{ await mutateTicket(t.path, p=>{ p.status=status; }, `ticket: ${id} → ${status}`); await refresh(); }
+  catch(e){ toast("이동 실패: "+(e.message||e)); refresh(); }
 }
 async function addComment(){
   if(!EDIT)return; const text=$("#cmt-text").value.trim(); if(!text){toast("내용을 입력하세요");return;}
-  const c=getCfg(); const line=`- [${today()} · ${c.displayName||"익명"}] ${text}`;
+  const c=getCfg(); const line=`- [${today()} · ${c.displayName||"익명"}] ${text.replace(/\s*\n+\s*/g,"; ")}`;
   const btn=$("#cmt-add"); btn.disabled=true;
   try{
-    for(let attempt=0;attempt<2;attempt++){
-      const fresh=await getFile(EDIT.path); const p=parseTicket(fresh.text,{sha:fresh.sha,path:EDIT.path});
-      p.comments.push(line);
-      try{ await putFile(EDIT.path,serialize(p),`ticket: ${EDIT.id} 코멘트`,fresh.sha);
-        EDIT=p; renderComments(EDIT); $("#cmt-text").value=""; toast("💬 코멘트 추가됨");
-        const idx=TICKETS.findIndex(x=>x.id===EDIT.id); if(idx>=0)TICKETS[idx]=EDIT; break;
-      }catch(e){ if(e.status===409&&attempt===0)continue; throw e; }
-    }
+    const p=await mutateTicket(EDIT.path, t=>{ t.comments.push(line); }, `ticket: ${EDIT.id} 코멘트`);
+    EDIT=p; const idx=TICKETS.findIndex(x=>x.id===EDIT.id); if(idx>=0)TICKETS[idx]=EDIT;
+    renderComments(EDIT); $("#cmt-text").value=""; toast("💬 코멘트 추가됨");
   }catch(e){toast("코멘트 실패: "+(e.message||e));}
   finally{btn.disabled=false;}
 }
@@ -412,13 +419,14 @@ async function archiveTicket(){
   try{
     const arch={...EDIT,status:"archived"};
     await putFile(`assistant/tickets/archive/${EDIT.id}.md`,serialize(arch),`ticket: ${EDIT.id} 아카이브`);
-    await delFile(EDIT.path,EDIT.sha,`ticket: ${EDIT.id} 원본 제거(아카이브)`);
+    const fresh=await getFile(EDIT.path);
+    await delFile(EDIT.path, fresh?.sha||EDIT.sha, `ticket: ${EDIT.id} 원본 제거(아카이브)`);
     closeAll(); await refresh(); toast("📦 보관함으로 이동");
   }catch(e){toast("아카이브 실패: "+(e.message||e));}
 }
 async function deleteTicket(){
   if(!EDIT||!confirm("이 티켓을 완전히 삭제할까요? (되돌릴 수 없음)"))return;
-  try{ await delFile(EDIT.path,EDIT.sha,`ticket: ${EDIT.id} 삭제`); closeAll(); await refresh(); toast("삭제됨"); }
+  try{ const fresh=await getFile(EDIT.path); await delFile(EDIT.path, fresh?.sha||EDIT.sha, `ticket: ${EDIT.id} 삭제`); closeAll(); await refresh(); toast("삭제됨"); }
   catch(e){toast("삭제 실패: "+(e.message||e));}
 }
 const closeAll=()=>$$(".modal-bg").forEach(m=>m.classList.remove("open"));
