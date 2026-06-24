@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>KPI 비서 대시보드</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --good:#34d399;
+    --warn:#fbbf24; --bad:#f87171; --proactive:#34d399; --reactive:#fb923c;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard",
+      "Malgun Gothic",system-ui,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+    padding:0 0 64px;
+  }
+  header.top{
+    position:sticky; top:0; z-index:10; background:rgba(15,23,42,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+    padding:env(safe-area-inset-top) 16px 0;
+  }
+  .top-row{display:flex; align-items:center; gap:10px; height:54px}
+  .top-row h1{font-size:17px; margin:0; flex:1; font-weight:700}
+  .top-row .sub{font-size:11px; color:var(--muted); font-weight:400}
+  button{
+    font:inherit; cursor:pointer; border:1px solid var(--line);
+    background:var(--panel2); color:var(--txt); border-radius:10px;
+    padding:8px 12px; transition:.15s;
+  }
+  button:hover{border-color:var(--accent)}
+  button.icon{padding:8px 10px; font-size:15px}
+  button.primary{background:var(--accent); color:#04293b; border-color:var(--accent); font-weight:600}
+  main{max-width:880px; margin:0 auto; padding:16px}
+  section.card{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin-bottom:14px;
+  }
+  section.card > h2{
+    font-size:13px; letter-spacing:.04em; text-transform:uppercase;
+    color:var(--muted); margin:0 0 12px; font-weight:700;
+    display:flex; align-items:center; gap:8px;
+  }
+  .kpi-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px}
+  .kpi{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px}
+  .kpi .id{font-size:11px; color:var(--accent); font-weight:700}
+  .kpi .title{font-size:14px; font-weight:600; margin:2px 0 8px}
+  .kpi .nums{font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 12px}
+  .kpi .nums b{color:var(--txt); font-weight:600}
+  .kpi .memo{font-size:11px; color:var(--muted); margin-top:8px; line-height:1.45}
+  .stars{color:var(--warn); letter-spacing:1px; font-size:12px}
+  .bar{height:7px; background:var(--line); border-radius:99px; margin-top:9px; overflow:hidden}
+  .bar > i{display:block; height:100%; background:var(--accent); border-radius:99px}
+  .bar.split{display:flex}
+  .bar.split > .p{background:var(--proactive)}
+  .bar.split > .r{background:var(--reactive)}
+  .barlabel{font-size:11px; color:var(--muted); margin-top:6px; display:flex; justify-content:space-between}
+  table{width:100%; border-collapse:collapse; font-size:13px}
+  th,td{text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top}
+  th{color:var(--muted); font-size:11px; font-weight:600; text-transform:uppercase}
+  td .tag{font-size:10px; padding:1px 6px; border-radius:99px; border:1px solid var(--line)}
+  .tag.proactive{color:var(--proactive); border-color:var(--proactive)}
+  .tag.reactive{color:var(--reactive); border-color:var(--reactive)}
+  .kpi-pill{font-size:10px; color:var(--accent); border:1px solid var(--accent); border-radius:99px; padding:1px 6px; white-space:nowrap}
+  ul.clean{list-style:none; margin:0; padding:0}
+  ul.clean li{padding:7px 0; border-bottom:1px solid var(--line); font-size:13px; display:flex; gap:8px; align-items:flex-start}
+  ul.clean li:last-child{border-bottom:0}
+  .empty{color:var(--muted); font-size:13px; padding:8px 0}
+  .alert{border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:10px; border:1px solid}
+  .alert.warn{background:rgba(251,191,36,.08); border-color:var(--warn); color:#fde68a}
+  .alert.bad{background:rgba(248,113,113,.08); border-color:var(--bad); color:#fca5a5}
+  .alert.good{background:rgba(52,211,153,.08); border-color:var(--good); color:#a7f3d0}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  label.fld{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px}
+  input,select,textarea{
+    width:100%; font:inherit; background:var(--bg); color:var(--txt);
+    border:1px solid var(--line); border-radius:9px; padding:9px 10px;
+  }
+  textarea{min-height:70px; resize:vertical}
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(0,0,0,.6); display:none;
+    align-items:flex-start; justify-content:center; padding:24px 14px; z-index:50; overflow:auto;
+  }
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px; width:100%; max-width:460px}
+  .modal h3{margin:0 0 4px; font-size:16px}
+  .modal p.hint{font-size:11px; color:var(--muted); margin:4px 0 0; line-height:1.5}
+  .modal .actions{display:flex; gap:8px; margin-top:16px}
+  .modal .actions button{flex:1}
+  .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--panel2); border:1px solid var(--line); border-radius:10px;
+    padding:10px 16px; font-size:13px; z-index:99; opacity:0; transition:.2s; pointer-events:none;
+    max-width:90vw}
+  .toast.show{opacity:1}
+  .small{font-size:11px; color:var(--muted)}
+  .spin{display:inline-block; width:14px; height:14px; border:2px solid var(--line);
+    border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .center{display:flex; flex-direction:column; align-items:center; gap:12px; padding:40px 0; text-align:center}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <div style="flex:1">
+      <h1>KPI 비서 대시보드</h1>
+      <div class="sub" id="ctx-sub">—</div>
+    </div>
+    <button class="icon" id="btn-share" title="공유(오늘 로그에 기록)">＋ 공유</button>
+    <button class="icon" id="btn-refresh" title="새로고침">↻</button>
+    <button class="icon" id="btn-settings" title="설정">⚙</button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="center" id="boot">
+    <div class="spin"></div>
+    <div class="small">불러오는 중…</div>
+  </div>
+</main>
+
+<!-- 설정 모달 -->
+<div class="modal-bg" id="settings-modal">
+  <div class="modal">
+    <h3>설정</h3>
+    <p class="hint">토큰은 <b>이 브라우저(localStorage)에만</b> 저장되고 GitHub API로만 전송됩니다.
+      비공개 데이터 repo를 읽고 쓰려면 <b>Contents: Read/Write</b> 권한의
+      fine-grained PAT가 필요합니다.</p>
+    <label class="fld">GitHub Token (PAT)</label>
+    <input id="f-token" type="password" placeholder="github_pat_..." autocomplete="off" />
+    <label class="fld">Owner</label>
+    <input id="f-owner" placeholder="gracecho-study" />
+    <label class="fld">Repo</label>
+    <input id="f-repo" placeholder="2020-study" />
+    <label class="fld">Branch</label>
+    <input id="f-branch" placeholder="claude/dreamy-bell-nwgcly" />
+    <div class="actions">
+      <button id="f-clear">토큰 삭제</button>
+      <button class="primary" id="f-save">저장 &amp; 불러오기</button>
+    </div>
+    <p class="hint" style="margin-top:12px">셋업 가이드는 repo의 <code>docs/SETUP.md</code> 참고.</p>
+  </div>
+</div>
+
+<!-- 공유 모달 -->
+<div class="modal-bg" id="share-modal">
+  <div class="modal">
+    <h3>오늘 한 일 공유</h3>
+    <p class="hint" id="share-date">—</p>
+    <label class="fld">상태</label>
+    <select id="s-status">
+      <option value="완료">✅ 완료</option>
+      <option value="진행중">🟦 진행중</option>
+      <option value="블로커">⛔ 블로커</option>
+    </select>
+    <label class="fld">내용</label>
+    <textarea id="s-text" placeholder="무엇을 했는지 / 막혔는지"></textarea>
+    <div class="row">
+      <div style="flex:1">
+        <label class="fld">KPI</label>
+        <select id="s-kpi"><option value="">(미지정)</option></select>
+      </div>
+      <div style="flex:1">
+        <label class="fld">태그</label>
+        <select id="s-tag">
+          <option value="proactive">proactive (내 주도)</option>
+          <option value="reactive">reactive (f/up)</option>
+        </select>
+      </div>
+      <div style="width:80px">
+        <label class="fld">시간(h)</label>
+        <input id="s-hours" type="number" step="0.5" min="0" placeholder="1" />
+      </div>
+    </div>
+    <div class="actions">
+      <button id="s-cancel">취소</button>
+      <button class="primary" id="s-save">기록 &amp; 커밋</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ───────────────────────── 설정 / 상태 ───────────────────────── */
+const LS_KEY = "kpi-dash-cfg";
+const DEFAULTS = { token:"", owner:"gracecho-study", repo:"2020-study", branch:"claude/dreamy-bell-nwgcly" };
+
+function getCfg(){
+  try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(LS_KEY)||"{}")); }
+  catch(e){ return Object.assign({}, DEFAULTS); }
+}
+function setCfg(c){ localStorage.setItem(LS_KEY, JSON.stringify(c)); }
+
+let STATE = {};  // 로드된 파싱 결과 보관
+
+/* ───────────────────────── 유틸 ───────────────────────── */
+const $  = (s,el=document)=>el.querySelector(s);
+const $$ = (s,el=document)=>Array.from(el.querySelectorAll(s));
+const esc = s => (s==null?"":String(s)).replace(/[&<>"']/g, c=>(
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let toastT;
+function toast(msg, ms=2600){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), ms);
+}
+
+function b64DecodeUtf8(b64){
+  const bin = atob((b64||"").replace(/\s/g,""));
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function b64EncodeUtf8(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin=""; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// 한국어 숫자 파싱: "45만" "2.52억" "347,896명" "0.143%" → 숫자
+function parseKNum(s){
+  if(s==null) return null;
+  const m = String(s).replace(/,/g,"").match(/(-?\d+(?:\.\d+)?)\s*(억|만)?/);
+  if(!m) return null;
+  let n = parseFloat(m[1]);
+  if(m[2]==="억") n *= 1e8;
+  else if(m[2]==="만") n *= 1e4;
+  return n;
+}
+function fmtNum(n){
+  if(n==null||isNaN(n)) return "—";
+  if(Math.abs(n)>=1e8) return (n/1e8).toLocaleString(undefined,{maximumFractionDigits:2})+"억";
+  if(Math.abs(n)>=1e4) return (n/1e4).toLocaleString(undefined,{maximumFractionDigits:1})+"만";
+  return n.toLocaleString();
+}
+
+function todayISO(){
+  const d=new Date();
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function weekdayKo(dateStr){
+  const d = dateStr?new Date(dateStr+"T00:00:00"):new Date();
+  return ["일","월","화","수","목","금","토"][d.getDay()];
+}
+// ISO 주차 (YYYY-Www)
+function isoWeek(d=new Date()){
+  const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  const day=(t.getUTCDay()+6)%7;            // 월=0
+  t.setUTCDate(t.getUTCDate()-day+3);       // 그 주 목요일
+  const firstThu=new Date(Date.UTC(t.getUTCFullYear(),0,4));
+  const week=1+Math.round(((t-firstThu)/86400000-3+((firstThu.getUTCDay()+6)%7))/7);
+  return `${t.getUTCFullYear()}-W${String(week).padStart(2,"0")}`;
+}
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d=new Date(dateStr+"T00:00:00"); if(isNaN(d)) return null;
+  return Math.round((d - new Date(todayISO()+"T00:00:00"))/86400000);
+}
+
+/* ───────────────────────── GitHub API ───────────────────────── */
+async function gh(path, opts={}){
+  const c=getCfg();
+  if(!c.token) { const e=new Error("토큰 없음"); e.code="NOTOKEN"; throw e; }
+  const url=`https://api.github.com/repos/${c.owner}/${c.repo}/${path}`;
+  const res=await fetch(url,{ ...opts, headers:{
+    "Authorization":`Bearer ${c.token}`,
+    "Accept":"application/vnd.github+json",
+    "X-GitHub-Api-Version":"2022-11-28",
+    ...(opts.headers||{})
+  }});
+  if(!res.ok){
+    let body=""; try{ body=(await res.json()).message||""; }catch(_){}
+    const e=new Error(`GitHub ${res.status} ${body}`); e.status=res.status; throw e;
+  }
+  return res.status===204?null:res.json();
+}
+async function getFile(filepath){
+  const c=getCfg();
+  try{
+    const d=await gh(`contents/${encodeURI(filepath)}?ref=${encodeURIComponent(c.branch)}`);
+    return { text:b64DecodeUtf8(d.content), sha:d.sha };
+  }catch(e){ if(e.status===404) return null; throw e; }
+}
+async function listDir(dir){
+  const c=getCfg();
+  try{
+    const d=await gh(`contents/${encodeURI(dir)}?ref=${encodeURIComponent(c.branch)}`);
+    return Array.isArray(d)?d:[];
+  }catch(e){ if(e.status===404) return []; throw e; }
+}
+async function putFile(filepath, text, message, sha){
+  const c=getCfg();
+  const body={ message, content:b64EncodeUtf8(text), branch:c.branch };
+  if(sha) body.sha=sha;
+  return gh(`contents/${encodeURI(filepath)}`,{ method:"PUT", body:JSON.stringify(body) });
+}
+
+/* ───────────────────────── 파서 ───────────────────────── */
+function parseKPI(text){
+  if(!text) return [];
+  const out=[];
+  const re=/^##\s+(KPI-[^:：]+)\s*[:：]\s*(.+)$/gm;
+  const idx=[]; let m;
+  while((m=re.exec(text))) idx.push({id:m[1].trim(), title:m[2].trim(), start:m.index, fieldStart:re.lastIndex});
+  idx.forEach((k,i)=>{
+    const end = i+1<idx.length ? idx[i+1].start : text.length;
+    const block = text.slice(k.fieldStart, end);
+    const f = {};
+    block.replace(/^\s*-\s+\*\*(.+?)\*\*\s*[:：]\s*(.*)$/gm,(_,lab,val)=>{ f[lab.trim()]=val.trim(); return ""; });
+    out.push({
+      id:k.id, title:k.title,
+      goal:f["목표/측정지표"]||"", current:f["현재값"]||"",
+      weight:parseInt((f["가중치(1~5)"]||"").match(/\d/)||["3"],10),
+      memo:f["메모"]||""
+    });
+  });
+  return out;
+}
+function parseConfig(text){
+  const g=(re)=>{ const m=(text||"").match(re); return m?m[1].trim():null; };
+  const actions=[];
+  const sec=(text||"").split(/##\s*활성 회고 액션/)[1];
+  if(sec) sec.replace(/^\s*-\s+(?!\()(.+)$/gm,(_,a)=>{ if(!/회고하면 여기/.test(a)) actions.push(a.trim()); return ""; });
+  return {
+    target_proactive_ratio: parseFloat(g(/target_proactive_ratio`?:\s*`?([\d.]+)/))||null,
+    weekly_wip_limit: parseInt(g(/weekly_wip_limit`?:\s*`?(\d+)/),10)||null,
+    next_retro_due: g(/next_retro_due`?:\s*`?([\d-]+)/),
+    w:{
+      kpi:parseFloat(g(/w_kpi_alignment`?:\s*`?([\d.]+)/))||3,
+      impact:parseFloat(g(/w_impact`?:\s*`?([\d.]+)/))||3,
+      urgency:parseFloat(g(/w_urgency`?:\s*`?([\d.]+)/))||2,
+      effort:parseFloat(g(/w_effort`?:\s*`?([\d.]+)/))||1
+    },
+    retroActions:actions
+  };
+}
+function parseTaskLine(line){
+  const done=/^\s*-\s*\[[xX]\]/.test(line);
+  const body=line.replace(/^\s*-\s*\[[ xX]\]\s*/,"");
+  const parts=body.split("|").map(s=>s.trim());
+  const t={ done, title:parts[0]||"" };
+  parts.slice(1).forEach(p=>{
+    const mm=p.match(/^(KPI|임팩트|노력|마감|태그|시간)\s*[:：]\s*(.+)$/);
+    if(mm){
+      const k=mm[1], v=mm[2].trim();
+      if(k==="KPI") t.kpi=v;
+      else if(k==="임팩트") t.impact=parseInt(v,10);
+      else if(k==="노력") t.effort=parseInt(v,10);
+      else if(k==="마감") t.due=v;
+      else if(k==="태그") t.tag=v;
+      else if(k==="시간") t.hours=parseFloat(v);
+    }
+  });
+  return t;
+}
+function parseBacklog(text){
+  if(!text) return [];
+  return (text.match(/^\s*-\s*\[[ xX]\].*$/gm)||[]).map(parseTaskLine).filter(t=>t.title);
+}
+function parseWeekly(text){
+  if(!text) return null;
+  const goalSec=text.split(/##\s*이번 주 목표[^\n]*/)[1];
+  const goals=[];
+  if(goalSec) goalSec.split(/##/)[0].replace(/^\s*-\s+(.+)$/gm,(_,g)=>{ if(!/이번 주 핵심/.test(g)) goals.push(g.trim()); return ""; });
+  const rows=[];
+  (text.match(/^\|.*\|$/gm)||[]).forEach(r=>{
+    const c=r.split("|").map(s=>s.trim()); c.shift(); c.pop();
+    if(c.length<7) return;
+    if(/^순위$/.test(c[0]) || /^[-:\s]+$/.test(c[0])) return;
+    if(!c[1]) return; // 빈 업무행 스킵
+    rows.push({ rank:c[0], title:c[1], kpi:c[2], due:c[3], ie:c[4], tag:c[5], status:c[6] });
+  });
+  return { goals, rows };
+}
+function parseDaily(text){
+  if(!text) return null;
+  const sect=(name)=>{
+    const re=new RegExp(`##\\s*${name}\\s*([\\s\\S]*?)(?=\\n##|\\n---|$)`);
+    const m=text.match(re); if(!m) return [];
+    return (m[1].match(/^\s*-\s+.*$/gm)||[]).map(l=>l.replace(/^\s*-\s+/,"").trim())
+      .filter(l=>l && !/^<.+>$/.test(l));
+  };
+  const foot=text.match(/proactive 합계\s*[:：]\s*([\d.]+).*?reactive 합계\s*[:：]\s*([\d.]+)/s);
+  return {
+    done:sect("완료").map(parseTaskLine),
+    doing:sect("진행중").map(parseTaskLine),
+    blockers:sect("블로커"),
+    proactive: foot?parseFloat(foot[1]):null,
+    reactive:  foot?parseFloat(foot[2]):null
+  };
+}
+
+/* ───────────────────────── 점수화 ───────────────────────── */
+function urgencyScore(due){
+  const d=daysUntil(due);
+  if(d==null) return 2;
+  if(d<=7) return 5; if(d<=30) return 4; if(d<=90) return 3; return 2;
+}
+function scoreTask(t, kpiMap, w){
+  const kpiW = kpiMap[t.kpi]?.weight ?? 3;
+  const impact = t.impact ?? 3, effort = t.effort ?? 3;
+  return w.kpi*kpiW + w.impact*impact + w.urgency*urgencyScore(t.due) - w.effort*effort;
+}
+
+/* ───────────────────────── 데이터 로드 ───────────────────────── */
+async function loadAll(){
+  const [kpiF, cfgF, backF, dailyList, weeklyList] = await Promise.all([
+    getFile("assistant/kpi.md"),
+    getFile("assistant/config.md"),
+    getFile("assistant/backlog.md"),
+    listDir("assistant/daily"),
+    listDir("assistant/weekly")
+  ]);
+
+  const kpis = parseKPI(kpiF?.text);
+  const cfg  = parseConfig(cfgF?.text);
+  const backlog = parseBacklog(backF?.text);
+
+  // 이번 주 weekly 파일(없으면 최신)
+  const wk = isoWeek();
+  const weeklyFiles = weeklyList.filter(f=>/\.md$/.test(f.name)).sort((a,b)=>a.name<b.name?1:-1);
+  let weekly=null, weeklyName=null;
+  const target = weeklyFiles.find(f=>f.name===wk+".md") || weeklyFiles[0];
+  if(target){ weekly=parseWeekly((await getFile("assistant/weekly/"+target.name))?.text); weeklyName=target.name.replace(".md",""); }
+
+  // 오늘 daily(없으면 최신) + 최근 14개 daily로 비중 집계
+  const dailyFiles = dailyList.filter(f=>/^\d{4}-\d{2}-\d{2}\.md$/.test(f.name)).sort((a,b)=>a.name<b.name?1:-1);
+  const todayName = todayISO()+".md";
+  const todayFile = dailyFiles.find(f=>f.name===todayName) || dailyFiles[0];
+  let today=null, todayUsed=null;
+  if(todayFile){ today=parseDaily((await getFile("assistant/daily/"+todayFile.name))?.text); todayUsed=todayFile.name.replace(".md",""); }
+
+  const recent = dailyFiles.slice(0,14);
+  const recentParsed = await Promise.all(recent.map(async f=>parseDaily((await getFile("assistant/daily/"+f.name))?.text)));
+  let pSum=0,rSum=0,hasHours=false;
+  recentParsed.forEach(d=>{ if(!d) return;
+    if(d.proactive!=null||d.reactive!=null){ hasHours=true; pSum+=d.proactive||0; rSum+=d.reactive||0; }
+  });
+
+  STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed,
+            ratio:{p:pSum,r:rSum,has:hasHours}, hasKpiFile:!!kpiF };
+  return STATE;
+}
+
+/* ───────────────────────── 렌더 ───────────────────────── */
+function kpiMapById(kpis){ const m={}; kpis.forEach(k=>m[k.id]=k); return m; }
+
+function renderKPIs(kpis){
+  if(!kpis.length) return `<section class="card"><h2>KPI</h2><div class="empty">KPI 파일이 비어있거나 못 읽었습니다.</div></section>`;
+  const cards = kpis.map(k=>{
+    const cur=parseKNum(k.current), goal=parseKNum(k.goal);
+    let bar="";
+    if(cur!=null && goal!=null && goal!==0){
+      const reduction = /절감|↓|낮|감소|줄/.test(k.goal+k.memo) || cur>goal;
+      const pct = reduction ? Math.min(100,(goal/cur)*100) : Math.min(100,(cur/goal)*100);
+      bar=`<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+           <div class="barlabel"><span>${reduction?"목표 근접도":"달성률"}</span><span>${pct.toFixed(0)}%</span></div>`;
+    }
+    return `<div class="kpi">
+      <div class="id">${esc(k.id)}</div>
+      <div class="title">${esc(k.title)}</div>
+      <div class="nums">
+        <span>현재 <b>${esc(k.current||"—")}</b></span>
+        <span>목표 <b>${esc(k.goal||"—")}</b></span>
+      </div>
+      ${bar}
+      <div class="nums" style="margin-top:8px"><span class="stars">${"★".repeat(k.weight)}${"☆".repeat(5-k.weight)}</span></div>
+      ${k.memo?`<div class="memo">${esc(k.memo)}</div>`:""}
+    </div>`;
+  }).join("");
+  return `<section class="card"><h2>KPI 진척</h2><div class="kpi-grid">${cards}</div></section>`;
+}
+
+function renderAlerts(s){
+  const a=[];
+  // 회고 임박
+  const dd=daysUntil(s.cfg.next_retro_due);
+  if(dd!=null && dd<=2) a.push(`<div class="alert ${dd<0?"bad":"warn"}">📝 회고 ${dd<0?`${-dd}일 지남`:dd===0?"오늘":`D-${dd}`} (${s.cfg.next_retro_due}). "회고"라고 말해 진행하세요.</div>`);
+  // WIP 초과
+  const doing = s.today?.doing?.length || (s.weekly?.rows||[]).filter(r=>/진행/.test(r.status)).length;
+  if(s.cfg.weekly_wip_limit && doing>s.cfg.weekly_wip_limit)
+    a.push(`<div class="alert warn">⚠️ 진행중 업무 ${doing}개 — WIP 한도(${s.cfg.weekly_wip_limit}) 초과.</div>`);
+  // proactive 비중
+  if(s.ratio.has){
+    const tot=s.ratio.p+s.ratio.r, pr=tot?s.ratio.p/tot:0, tgt=s.cfg.target_proactive_ratio;
+    if(tgt && pr<tgt) a.push(`<div class="alert bad">🔻 proactive 비중 ${(pr*100).toFixed(0)}% &lt; 목표 ${(tgt*100).toFixed(0)}%. f/up에 매몰되는 중 — 내 임팩트 업무 시간을 확보하세요.</div>`);
+  }
+  // 회고 액션 상기
+  (s.cfg.retroActions||[]).forEach(act=>a.push(`<div class="alert good">🎯 회고 액션: ${esc(act)}</div>`));
+  return a.length?`<section class="card"><h2>알림</h2>${a.join("")}</section>`:"";
+}
+
+function renderWeekly(s){
+  const w=s.weekly;
+  let inner;
+  if(!w || !w.rows.length){
+    inner=`<div class="empty">이번 주(${esc(isoWeek())}) 우선순위가 아직 없습니다. Claude에게 "서머리"라고 해서 주간 계획을 만드세요.</div>`;
+  } else {
+    const goals = w.goals.length?`<ul class="clean" style="margin-bottom:10px">${w.goals.map(g=>`<li>🎯 ${esc(g)}</li>`).join("")}</ul>`:"";
+    const rows=w.rows.map(r=>`<tr>
+      <td><b>${esc(r.rank)}</b></td>
+      <td>${esc(r.title)} ${r.tag?`<span class="tag ${/pro/.test(r.tag)?"proactive":"reactive"}">${esc(r.tag)}</span>`:""}</td>
+      <td>${r.kpi?`<span class="kpi-pill">${esc(r.kpi)}</span>`:""}</td>
+      <td class="small">${esc(r.due||"")}</td>
+      <td>${esc(r.status||"")}</td>
+    </tr>`).join("");
+    inner=`${goals}<table><thead><tr><th>#</th><th>업무</th><th>KPI</th><th>마감</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  return `<section class="card"><h2>이번 주 우선순위 🔒 ${s.weeklyName?`<span class="small" style="text-transform:none">(${esc(s.weeklyName)})</span>`:""}</h2>${inner}</section>`;
+}
+
+function renderToday(s){
+  const t=s.today;
+  const ratioBar=()=>{
+    if(!s.ratio.has) return `<div class="small">아직 시간 기록 없음 (공유 로그가 쌓이면 집계).</div>`;
+    const tot=s.ratio.p+s.ratio.r, pp=tot?s.ratio.p/tot*100:0, rp=100-pp;
+    const tgt=s.cfg.target_proactive_ratio;
+    return `<div class="bar split">
+        <div class="p" style="width:${pp.toFixed(0)}%"></div><div class="r" style="width:${rp.toFixed(0)}%"></div>
+      </div>
+      <div class="barlabel">
+        <span style="color:var(--proactive)">proactive ${pp.toFixed(0)}% (${s.ratio.p}h)</span>
+        <span style="color:var(--reactive)">reactive ${rp.toFixed(0)}% (${s.ratio.r}h)</span>
+      </div>
+      ${tgt?`<div class="small" style="margin-top:4px">목표 proactive ≥ ${(tgt*100).toFixed(0)}%</div>`:""}`;
+  };
+  let body;
+  if(!t || (!t.done.length && !t.doing.length && !t.blockers.length)){
+    body=`<div class="empty">${s.todayUsed?`(${esc(s.todayUsed)}) 기록 없음`:"오늘 로그 없음"} — 우상단 ＋공유로 기록하세요.</div>`;
+  } else {
+    const li=(arr,icon)=>arr.map(x=>`<li>${icon} ${esc(x.title||x)} ${x.kpi?`<span class="kpi-pill">${esc(x.kpi)}</span>`:""} ${x.tag?`<span class="tag ${/pro/.test(x.tag)?"proactive":"reactive"}">${esc(x.tag)}</span>`:""}</li>`).join("");
+    body=`<ul class="clean">
+      ${li(t.done,"✅")}${li(t.doing,"🟦")}
+      ${t.blockers.map(b=>`<li>⛔ ${esc(b)}</li>`).join("")}
+    </ul>`;
+  }
+  return `<section class="card"><h2>오늘 ${s.todayUsed?`<span class="small" style="text-transform:none">(${esc(s.todayUsed)} ${weekdayKo(s.todayUsed)})</span>`:""}</h2>${body}
+    <div style="margin-top:14px">${ratioBar()}</div></section>`;
+}
+
+function renderBacklog(s){
+  if(!s.backlog.length) return "";
+  const km=kpiMapById(s.kpis);
+  const scored=s.backlog.filter(t=>!t.done)
+    .map(t=>({t, sc:scoreTask(t,km,s.cfg.w)}))
+    .sort((a,b)=>b.sc-a.sc).slice(0,8);
+  const rows=scored.map(({t,sc})=>`<tr>
+    <td>${esc(t.title)}</td>
+    <td>${t.kpi?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}</td>
+    <td class="small">${t.impact??"—"}/${t.effort??"—"}</td>
+    <td>${t.tag?`<span class="tag ${/pro/.test(t.tag)?"proactive":"reactive"}">${esc(t.tag)}</span>`:""}</td>
+    <td><b>${sc.toFixed(0)}</b></td>
+  </tr>`).join("");
+  return `<section class="card"><h2>백로그 우선순위 (점수순)</h2>
+    <table><thead><tr><th>업무</th><th>KPI</th><th>임팩트/노력</th><th>태그</th><th>점수</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="small" style="margin-top:8px">점수 = KPI가중치·${s.cfg.w.kpi} + 임팩트·${s.cfg.w.impact} + 긴급도·${s.cfg.w.urgency} − 노력·${s.cfg.w.effort}</div>
+  </section>`;
+}
+
+function render(){
+  const s=STATE;
+  $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
+  $("#main").innerHTML =
+    renderAlerts(s) + renderKPIs(s.kpis) + renderWeekly(s) + renderToday(s) + renderBacklog(s);
+  // 공유 모달의 KPI 옵션 채우기
+  const sel=$("#s-kpi");
+  sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
+}
+
+/* ───────────────────────── 공유(쓰기) ───────────────────────── */
+async function submitShare(){
+  const status=$("#s-status").value, text=$("#s-text").value.trim();
+  const kpi=$("#s-kpi").value, tag=$("#s-tag").value, hours=$("#s-hours").value.trim();
+  if(!text){ toast("내용을 입력하세요"); return; }
+  const btn=$("#s-save"); btn.disabled=true; btn.textContent="저장 중…";
+  try{
+    const date=todayISO(), path=`assistant/daily/${date}.md`;
+    const existing=await getFile(path);
+    let md = existing? existing.text : initDaily(date);
+
+    let line = `- ${text}`;
+    if(status!=="블로커"){
+      line += ` | KPI: ${kpi||"—"} | 태그: ${tag}`;
+      if(hours) line += ` | 시간: ${hours}`;
+    }
+    md = insertUnder(md, status, line);
+
+    // 푸터 합계 갱신
+    if(status!=="블로커" && hours){
+      md = bumpFooter(md, tag, parseFloat(hours));
+    }
+    await putFile(path, md, `share: ${date} ${status} 기록`, existing?.sha);
+    toast("✅ 기록 & 커밋 완료");
+    closeModal("#share-modal"); $("#s-text").value=""; $("#s-hours").value="";
+    await refresh();
+  }catch(e){
+    toast("저장 실패: "+(e.message||e));
+  }finally{ btn.disabled=false; btn.textContent="기록 & 커밋"; }
+}
+function initDaily(date){
+  return `# 일일 로그 — ${date} (${weekdayKo(date)})\n\n## 완료\n\n## 진행중\n\n## 블로커\n\n## 메모\n\n---\nproactive 합계: 0 / reactive 합계: 0\n`;
+}
+function insertUnder(md, section, line){
+  const re=new RegExp(`(##\\s*${section}\\b[^\\n]*\\n)`);
+  if(re.test(md)) return md.replace(re, `$1${line}\n`);
+  // 섹션이 없으면 메모 위 또는 끝에 추가
+  return md.replace(/(\n---)/, `\n## ${section}\n${line}\n$1`) || (md+`\n## ${section}\n${line}\n`);
+}
+function bumpFooter(md, tag, hours){
+  const re=/(proactive 합계\s*[:：]\s*)([\d.]+)(.*?reactive 합계\s*[:：]\s*)([\d.]+)/s;
+  if(!re.test(md)) return md+`\n---\nproactive 합계: ${/pro/.test(tag)?hours:0} / reactive 합계: ${/pro/.test(tag)?0:hours}\n`;
+  return md.replace(re,(_,a,p,b,r)=>{
+    const np=/pro/.test(tag)?(parseFloat(p)+hours):parseFloat(p);
+    const nr=/pro/.test(tag)?parseFloat(r):(parseFloat(r)+hours);
+    return `${a}${np}${b}${nr}`;
+  });
+}
+
+/* ───────────────────────── 모달/이벤트 ───────────────────────── */
+function openModal(sel){ $(sel).classList.add("open"); }
+function closeModal(sel){ $(sel).classList.remove("open"); }
+
+async function refresh(){
+  const c=getCfg();
+  if(!c.token){ showNeedSetup(); return; }
+  $("#main").innerHTML=`<div class="center"><div class="spin"></div><div class="small">불러오는 중…</div></div>`;
+  try{ await loadAll(); render(); }
+  catch(e){
+    if(e.code==="NOTOKEN"){ showNeedSetup(); return; }
+    $("#main").innerHTML=`<section class="card"><h2>오류</h2>
+      <div class="alert bad">${esc(e.message||String(e))}</div>
+      <div class="small">토큰 권한(Contents R/W)·owner·repo·branch를 설정에서 확인하세요. 비공개 repo면 토큰에 해당 repo 접근이 있어야 합니다.</div>
+      <div style="margin-top:12px"><button class="primary" id="err-set">설정 열기</button></div></section>`;
+    $("#err-set").onclick=()=>openSettings();
+  }
+}
+function showNeedSetup(){
+  $("#ctx-sub").textContent="설정 필요";
+  $("#main").innerHTML=`<section class="card"><h2>시작하기</h2>
+    <p>비공개 데이터 repo에 접근하려면 GitHub 토큰을 설정하세요.</p>
+    <ol class="small" style="line-height:1.9">
+      <li>GitHub → Settings → Developer settings → <b>Fine-grained tokens</b></li>
+      <li>대상 repo에 <b>Contents: Read and write</b> 권한 부여</li>
+      <li>아래 버튼으로 토큰·owner·repo·branch 입력</li>
+    </ol>
+    <div style="margin-top:12px"><button class="primary" id="setup-set">설정 열기</button></div>
+    <p class="hint" style="margin-top:14px">자세한 셋업: repo <code>docs/SETUP.md</code></p></section>`;
+  $("#setup-set").onclick=()=>openSettings();
+}
+function openSettings(){
+  const c=getCfg();
+  $("#f-token").value=c.token; $("#f-owner").value=c.owner;
+  $("#f-repo").value=c.repo; $("#f-branch").value=c.branch;
+  openModal("#settings-modal");
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  $("#btn-settings").onclick=openSettings;
+  $("#btn-refresh").onclick=refresh;
+  $("#btn-share").onclick=()=>{
+    if(!getCfg().token){ toast("먼저 설정에서 토큰을 등록하세요"); openSettings(); return; }
+    $("#share-date").textContent=`${todayISO()} (${weekdayKo()}) 일일 로그에 추가됩니다`;
+    openModal("#share-modal");
+  };
+  $("#f-save").onclick=()=>{
+    const c={ token:$("#f-token").value.trim(), owner:$("#f-owner").value.trim()||DEFAULTS.owner,
+      repo:$("#f-repo").value.trim()||DEFAULTS.repo, branch:$("#f-branch").value.trim()||DEFAULTS.branch };
+    setCfg(c); closeModal("#settings-modal"); refresh();
+  };
+  $("#f-clear").onclick=()=>{ const c=getCfg(); c.token=""; setCfg(c); $("#f-token").value=""; toast("토큰 삭제됨"); };
+  $("#s-cancel").onclick=()=>closeModal("#share-modal");
+  $("#s-save").onclick=submitShare;
+  $$(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{ if(e.target===bg) bg.classList.remove("open"); }));
+
+  refresh();
+});
+</script>
+</body>
+</html>
