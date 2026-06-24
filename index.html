@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24h (task-model) -->
+<!-- build: auto-deploy 2026-06-24i (mit-today) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -139,6 +139,10 @@
   .owner{font-size:10px; color:var(--muted); border:1px solid var(--line); border-radius:99px; padding:1px 7px; white-space:nowrap}
   .count{font-size:10px; color:var(--muted); background:var(--panel2); border-radius:99px; padding:0 7px}
   .kpi .owner{margin-left:6px}
+  .card.mit{border-color:var(--accent); background:linear-gradient(180deg, rgba(56,189,248,.08), var(--panel))}
+  .mit-t{font-size:16px; font-weight:700; line-height:1.45}
+  .mit-meta{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px}
+  .blk-h{font-size:11px; color:var(--muted); margin:2px 0 6px; font-weight:600}
 </style>
 </head>
 <body>
@@ -570,21 +574,45 @@ function renderAlerts(s){
   return a.length?`<section class="card"><h2>알림</h2>${a.join("")}</section>`:"";
 }
 
-function renderWeekly(s){
+function isDoneStatus(st){ return /완료|✅/.test(st||""); }
+function pickFocus(s){
+  // 오늘의 MIT = 이번 주 우선순위 중 미완료 최상위, 없으면 백로그 점수 최상위 미완료
   const w=s.weekly;
+  if(w && w.rows.length){
+    const active=w.rows.find(r=>!isDoneStatus(r.status));
+    if(active) return {title:active.title, kpi:active.kpi, ie:active.ie, due:active.due, src:"이번 주 1순위"};
+  }
+  const km=kpiMapById(s.kpis);
+  const cand=s.backlog.filter(t=>t.state!=="완료").map(t=>({t,sc:scoreTask(t,km,s.cfg.w)})).sort((a,b)=>b.sc-a.sc)[0];
+  if(cand) return {title:cand.t.title, kpi:cand.t.kpi, ie:`${cand.t.impact??"—"}/${cand.t.effort??"—"}`, due:cand.t.due, src:"백로그 최우선"};
+  return null;
+}
+function renderMIT(s){
+  const f=pickFocus(s); if(!f) return "";
+  const km=kpiMapById(s.kpis); const kn=f.kpi&&km[f.kpi]?km[f.kpi].title:"";
+  return `<section class="card mit"><h2>🐸 오늘의 MIT — 가장 중요한 일 하나</h2>
+    <div class="mit-t">${esc(f.title)}</div>
+    <div class="mit-meta">${f.kpi?`<span class="kpi-pill">${esc(f.kpi)}${kn?" · "+esc(kn):""}</span>`:""}${f.ie?`<span class="small">임팩트/노력 ${esc(f.ie)}</span>`:""}${f.due?`<span class="small">📅 ${esc(f.due)}</span>`:""}<span class="small">· ${esc(f.src)}</span></div>
+  </section>`;
+}
+function renderWeekly(s){
+  const w=s.weekly; const km=kpiMapById(s.kpis);
   let inner;
   if(!w || !w.rows.length){
     inner=`<div class="empty">이번 주(${esc(isoWeek())}) 우선순위가 아직 없습니다. Claude에게 "서머리"라고 해서 주간 계획을 만드세요.</div>`;
   } else {
     const goals = w.goals.length?`<ul class="clean" style="margin-bottom:10px">${w.goals.map(g=>`<li>🎯 ${esc(g)}</li>`).join("")}</ul>`:"";
-    const rows=w.rows.map(r=>`<tr>
+    const rows=w.rows.map(r=>{
+      const kn=r.kpi&&km[r.kpi]?km[r.kpi].title:"";
+      return `<tr>
       <td><b>${esc(r.rank)}</b></td>
-      <td>${esc(r.title)} ${r.tag?`<span class="tag ${/pro/.test(r.tag)?"proactive":"reactive"}">${esc(r.tag)}</span>`:""}</td>
-      <td>${r.kpi?`<span class="kpi-pill">${esc(r.kpi)}</span>`:""}</td>
+      <td>${esc(r.title)} ${r.tag?`<span class="tag ${/pro/.test(r.tag)?"proactive":"reactive"}">${esc(r.tag)}</span>`:""}
+        ${r.kpi?`<div class="small" style="margin-top:2px">${esc(r.kpi)}${kn?` · ${esc(kn)}`:""}${r.ie?` · 임팩트/노력 ${esc(r.ie)}`:""}</div>`:""}</td>
       <td class="small">${esc(r.due||"")}</td>
       <td>${esc(r.status||"")}</td>
-    </tr>`).join("");
-    inner=`${goals}<table><thead><tr><th>#</th><th>업무</th><th>KPI</th><th>마감</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table>`;
+    </tr>`;}).join("");
+    inner=`${goals}<table><thead><tr><th>#</th><th>업무 · 근거</th><th>마감</th><th>상태</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="small" style="margin-top:8px">🔒 주중에는 순서를 바꾸지 않습니다 — 상태만 갱신.</div>`;
   }
   return `<section class="card"><h2>이번 주 우선순위 🔒 ${s.weeklyName?`<span class="small" style="text-transform:none">(${esc(s.weeklyName)})</span>`:""}</h2>${inner}</section>`;
 }
@@ -604,21 +632,25 @@ function renderToday(s){
       </div>
       ${tgt?`<div class="small" style="margin-top:4px">목표 proactive ≥ ${(tgt*100).toFixed(0)}%</div>`:""}`;
   };
-  let body;
+  // 할 일(계획) = 이번 주 우선순위 중 미완료 top 3 → "오늘 뭐에 집중"
+  const plan=(s.weekly?.rows||[]).filter(r=>!isDoneStatus(r.status)).slice(0,3);
+  const planHtml=plan.length
+    ? `<ul class="clean">${plan.map((r,i)=>`<li>${i===0?"🐸":"⬜"} ${esc(r.title)} ${r.kpi?`<span class="kpi-pill">${esc(r.kpi)}</span>`:""} <span class="small">${esc(r.status||"")}</span></li>`).join("")}</ul>`
+    : `<div class="small">이번 주 우선순위가 없습니다 — "서머리"로 주간 계획을 만드세요.</div>`;
+  // 한 일(기록) = 오늘 일일 로그
+  let logHtml;
   if(!t || (!t.done.length && !t.doing.length && !t.blockers.length)){
-    body=`<div class="empty">${s.todayUsed?`(${esc(s.todayUsed)}) 기록 없음`:"오늘 로그 없음"} — 우상단 ＋공유로 기록하세요.</div>`;
+    logHtml=`<div class="empty">${s.todayUsed?`(${esc(s.todayUsed)}) 기록 없음`:"오늘 기록 없음"} — 우상단 ＋공유로 기록하세요.</div>`;
   } else {
-    // 같은 제목은 더 진행된 상태만 표시: 완료 > 진행중 (중복 줄 합치기)
     const seen=new Set();
     const uniq=(arr)=>arr.filter(x=>{ const k=(x.title||"").trim(); if(!k||seen.has(k))return false; seen.add(k); return true; });
     const doneU=uniq(t.done), doingU=uniq(t.doing);
     const li=(arr,icon)=>arr.map(x=>`<li>${icon} ${esc(x.title||x)} ${x.kpi?`<span class="kpi-pill">${esc(x.kpi)}</span>`:""} ${x.tag?`<span class="tag ${/pro/.test(x.tag)?"proactive":"reactive"}">${esc(x.tag)}</span>`:""}</li>`).join("");
-    body=`<ul class="clean">
-      ${li(doneU,"✅")}${li(doingU,"🟦")}
-      ${t.blockers.map(b=>`<li>⛔ ${esc(b)}</li>`).join("")}
-    </ul>`;
+    logHtml=`<ul class="clean">${li(doneU,"✅")}${li(doingU,"🟦")}${t.blockers.map(b=>`<li>⛔ ${esc(b)}</li>`).join("")}</ul>`;
   }
-  return `<section class="card"><h2>오늘 ${s.todayUsed?`<span class="small" style="text-transform:none">(${esc(s.todayUsed)} ${weekdayKo(s.todayUsed)})</span>`:""}</h2>${body}
+  return `<section class="card"><h2>오늘 ${s.todayUsed?`<span class="small" style="text-transform:none">(${esc(s.todayUsed)} ${weekdayKo(s.todayUsed)})</span>`:""}</h2>
+    <div class="blk-h">📋 할 일 — 이번 주 핵심에서 (오늘 집중)</div>${planHtml}
+    <div class="blk-h" style="margin-top:14px">✍️ 한 일 — 오늘 기록 (회고·비중 데이터)</div>${logHtml}
     <div style="margin-top:14px">${ratioBar()}</div></section>`;
 }
 
@@ -846,7 +878,7 @@ function render(){
   const s=STATE;
   $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
   $("#main").innerHTML =
-    renderAlerts(s) + renderKPIs(s.kpis) + renderWeekly(s) + renderToday(s) + renderBacklog(s);
+    renderAlerts(s) + renderKPIs(s.kpis) + renderMIT(s) + renderWeekly(s) + renderToday(s) + renderBacklog(s);
   // 공유 모달의 KPI 옵션 채우기
   const sel=$("#s-kpi");
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
