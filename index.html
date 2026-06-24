@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24j (task-unify) -->
+<!-- build: auto-deploy 2026-06-24k (reorder+slim) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -484,6 +484,7 @@ function parseTicketLite(text, meta){
   return { id:fm.id, title:fm.title||"", status:fm.status||"todo", kpi:fm.kpi||"기타",
     owner:fm.owner||"", impact:fm.impact?parseInt(fm.impact,10):null, effort:fm.effort?parseInt(fm.effort,10):null,
     due:fm.due||"", tag:fm.tag||"", requester:fm.requester||"", hasAnalysis,
+    order:(fm.order!==undefined&&fm.order!=="")?parseFloat(fm.order):null,
     sha:meta?.sha, path:meta?.path };
 }
 
@@ -573,16 +574,16 @@ function renderKPIs(kpis){
   if(!kpis.length) return `<section class="card"><h2>KPI</h2><div class="empty">KPI 파일이 비어있거나 못 읽었습니다.</div></section>`;
   const cards = kpis.map(k=>{
     const bar=kpiBar(k);
+    const compact=t=>{ const s=String(t||"").split(/\s*[(·]/)[0].trim(); return s||"—"; };
     return `<div class="kpi" data-kpi="${esc(k.id)}">
       <div class="id">${esc(k.id)}${k.owner?ownerBadge(k.owner):""}<span class="more">상세 ›</span></div>
       <div class="title">${esc(k.title)}</div>
       <div class="nums">
-        <span>현재 <b>${esc(k.current||"—")}</b></span>
-        <span>목표 <b>${esc(k.goal||"—")}</b></span>
+        <span>현재 <b>${esc(compact(k.current))}</b></span>
+        <span>목표 <b>${esc(compact(k.goal))}</b></span>
       </div>
       ${bar}
       <div class="nums" style="margin-top:8px"><span class="stars">${"★".repeat(k.weight)}${"☆".repeat(5-k.weight)}</span></div>
-      ${k.memo?`<div class="memo">${esc(k.memo.length>90?k.memo.slice(0,88)+"…":k.memo)}</div>`:""}
     </div>`;
   }).join("");
   return `<section class="card"><h2>KPI 진척</h2><div class="kpi-grid">${cards}</div></section>`;
@@ -701,7 +702,12 @@ function renderBacklog(s){
     <span class="task-meta">${t.kpi&&t.kpi!=="기타"?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}${ownerBadge(t.owner)}<span class="small">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span></span>
   </li>`;
   const sections=groups.map(([st,label])=>{
-    const list=tasks.filter(t=>t.state===st).sort((a,b)=>b.sc-a.sc);
+    const list=tasks.filter(t=>t.state===st).sort((a,b)=>{
+      const ao=a.order,bo=b.order;
+      if(ao!=null&&bo!=null) return ao-bo;
+      if(ao!=null) return -1; if(bo!=null) return 1;
+      return b.sc-a.sc;
+    });
     if(!list.length) return "";
     const shown = st==="완료" ? list.slice(0,5) : list;
     return `<div class="task-group"><div class="task-gh">${label} <span class="count">${list.length}</span></div>

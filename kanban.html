@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24j (task-unify) -->
+<!-- build: auto-deploy 2026-06-24k (reorder+slim) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -50,6 +50,8 @@
   .card{background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:11px; margin-bottom:9px; cursor:pointer; transition:.12s}
   .card:hover{border-color:var(--accent)}
   .card .t{font-size:13.5px; font-weight:600; line-height:1.4}
+  .card .drag{cursor:grab; color:var(--muted); font-size:11px; user-select:none}
+  .card.dragging{opacity:.45; border-color:var(--accent)}
   .card .meta{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center}
   .pill{font-size:10px; border-radius:99px; padding:1px 7px; border:1px solid var(--accent); color:var(--accent); white-space:nowrap}
   .pill.etc{border-color:var(--muted); color:var(--muted)}
@@ -134,6 +136,21 @@
         <button class="primary sm" id="tq-run">🐺 분석 요청</button>
       </div>
     </div>
+    <label class="fld">타이틀 <span class="hint">(목표 기반 자동 — 수정 가능)</span></label>
+    <input id="t-title" placeholder="자동 생성" />
+
+    <div class="two" id="tm-statusrow" style="display:none">
+      <div>
+        <label class="fld">상태</label>
+        <select id="t-status">
+          <option value="todo">해야 할 것</option>
+          <option value="doing">하는 중</option>
+          <option value="done">완료</option>
+        </select>
+      </div>
+      <div><label class="fld">티켓 ID</label><input id="t-id" disabled /></div>
+    </div>
+
     <label class="fld">사실 (관찰된 현상)</label>
     <textarea id="t-fact" placeholder="예: 미니보험 가입자는 보장성 보험 가입율이 낮음"></textarea>
     <label class="fld">결과 (그래서 생긴 일)</label>
@@ -165,20 +182,6 @@
     <div class="two">
       <div><label class="fld">임팩트 (1~5)</label><input id="t-impact" type="number" min="1" max="5" placeholder="3" /></div>
       <div><label class="fld">노력 (1~5)</label><input id="t-effort" type="number" min="1" max="5" placeholder="2" /></div>
-    </div>
-    <label class="fld">타이틀 <span class="hint">(목표 기반 자동 — 수정 가능)</span></label>
-    <input id="t-title" placeholder="자동 생성" />
-
-    <div class="two" id="tm-statusrow" style="display:none">
-      <div>
-        <label class="fld">상태</label>
-        <select id="t-status">
-          <option value="todo">해야 할 것</option>
-          <option value="doing">하는 중</option>
-          <option value="done">완료</option>
-        </select>
-      </div>
-      <div><label class="fld">티켓 ID</label><input id="t-id" disabled /></div>
     </div>
 
     <div class="actions">
@@ -270,7 +273,7 @@ async function delFile(p,sha,msg){const c=getCfg();return gh(`contents/${encodeU
 /* ───── 티켓 직렬화/파싱 ───── */
 function serialize(t){
   const fm=[`id: ${t.id}`,`title: ${t.title||""}`,`status: ${t.status||"todo"}`,`kpi: ${t.kpi||"기타"}`,
-    `owner: ${t.owner||""}`,`impact: ${t.impact??""}`,`effort: ${t.effort??""}`,`due: ${t.due||""}`,`tag: ${t.tag||"proactive"}`,
+    `owner: ${t.owner||""}`,`impact: ${t.impact??""}`,`effort: ${t.effort??""}`,`due: ${t.due||""}`,`tag: ${t.tag||"proactive"}`,`order: ${t.order??""}`,
     `requester: ${t.requester||""}`,`created: ${t.created||today()}`,`updated: ${today()}`].join("\n");
   const body=[`## 사실\n${t.fact||""}`,`## 결과\n${t.result||""}`,`## 문제\n${t.problem||""}`,
     `## 목표\n${t.goal||""}`,`## 코멘트\n${(t.comments||[]).join("\n")}`].join("\n\n");
@@ -284,7 +287,7 @@ function parseTicket(text,meta){
   const comments=craw?craw.split(/\n/).map(s=>s.trim()).filter(s=>s.startsWith("-")):[];
   return {id:fm.id,title:fm.title||"",status:fm.status||"todo",kpi:fm.kpi||"기타",
     owner:fm.owner||"",impact:fm.impact?parseInt(fm.impact,10):null,effort:fm.effort?parseInt(fm.effort,10):null,
-    due:fm.due||"",tag:fm.tag||"",
+    due:fm.due||"",tag:fm.tag||"",order:(fm.order!==undefined&&fm.order!=="")?parseFloat(fm.order):null,
     requester:fm.requester||"",created:fm.created||"",updated:fm.updated||"",
     fact:sec("사실"),result:sec("결과"),problem:sec("문제"),goal:sec("목표"),
     comments,sha:meta?.sha,path:meta?.path};
@@ -323,22 +326,33 @@ function kpiPill(id){const etc=id==="기타"||!/^KPI-/.test(id);return `<span cl
 
 /* ───── 렌더 ───── */
 const STATUSES=[["todo","해야 할 것"],["doing","하는 중"],["done","완료"]];
-function cardHTML(t){
+// 우선순위 정렬: order 있는 카드 먼저(오름차순), 없으면 최신 id 먼저
+function byOrder(a,b){
+  const ao=a.order, bo=b.order;
+  if(ao!=null && bo!=null) return ao-bo;
+  if(ao!=null) return -1;
+  if(bo!=null) return 1;
+  return a.id<b.id?1:-1;
+}
+function columnList(status){ return TICKETS.filter(t=>t.status===status).sort(byOrder); }
+function cardHTML(t,idx,len){
   const order=["todo","doing","done"]; const i=order.indexOf(t.status);
-  const left=i>0?`<button class="sm" data-move="${t.id}|${order[i-1]}">◀</button>`:`<button class="sm" disabled>·</button>`;
-  const right=i<2?`<button class="sm" data-move="${t.id}|${order[i+1]}">▶</button>`:`<button class="sm" disabled>·</button>`;
-  return `<div class="card" data-open="${t.id}">
-    <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
+  const left=i>0?`<button class="sm" data-move="${t.id}|${order[i-1]}" title="이전 단계로">◀</button>`:`<button class="sm" disabled>·</button>`;
+  const right=i<2?`<button class="sm" data-move="${t.id}|${order[i+1]}" title="다음 단계로">▶</button>`:`<button class="sm" disabled>·</button>`;
+  const up=idx>0?`<button class="sm" data-reorder="${t.id}|up" title="우선순위 ↑">▲</button>`:`<button class="sm" disabled>·</button>`;
+  const down=idx<len-1?`<button class="sm" data-reorder="${t.id}|down" title="우선순위 ↓">▼</button>`:`<button class="sm" disabled>·</button>`;
+  return `<div class="card" draggable="true" data-id="${t.id}" data-status="${t.status}" data-open="${t.id}">
+    <div class="t"><span class="drag" title="드래그로 순서 변경">⠿</span> ${esc(t.title||t.goal||"(제목 없음)")}</div>
     <div class="meta">${kpiPill(t.kpi)}${t.owner?`<span class="reqr">${t.owner==="본인"?"🙋":"👤"} ${esc(t.owner)}</span>`:""}${(t.impact||t.effort)?`<span class="reqr">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span>`:""}
       ${(t.fact||t.problem||t.goal)?`<span class="cmt-badge">📋 분석</span>`:""}${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
-    <div class="move">${left}${right}</div>
+    <div class="move">${up}${down}<span style="flex:0 0 8px"></span>${left}${right}</div>
   </div>`;
 }
 function renderBoard(){
   const cols=STATUSES.map(([key,label])=>{
-    const list=TICKETS.filter(t=>t.status===key);
-    return `<div class="col ${key}"><h2><span class="dot"></span>${label}<span class="count">${list.length}</span></h2>
-      ${list.length?list.map(cardHTML).join(""):`<div class="empty">없음</div>`}</div>`;
+    const list=columnList(key);
+    return `<div class="col ${key}" data-col="${key}"><h2><span class="dot"></span>${label}<span class="count">${list.length}</span></h2>
+      ${list.length?list.map((t,idx)=>cardHTML(t,idx,list.length)).join(""):`<div class="empty">없음</div>`}</div>`;
   }).join("");
   return `<div class="board">${cols}</div>`;
 }
@@ -476,6 +490,36 @@ async function moveTicket(id,status){
     toast("저장 실패 — 되돌렸어요. 잠시 후 다시 시도");
   }
 }
+async function persistOrder(status, idsInOrder){
+  // 새 순서대로 order=100,200,… 부여하고 바뀐 카드만 저장 (낙관적 UI)
+  const changed=[];
+  idsInOrder.forEach((id,idx)=>{
+    const t=TICKETS.find(x=>x.id===id); const want=(idx+1)*100;
+    if(t && t.order!==want){ t.order=want; changed.push(t); }
+  });
+  render();
+  for(const t of changed){
+    try{ const p=await mutateTicket(t.path, x=>{ x.order=t.order; }, `ticket: ${t.id} 우선순위`);
+      const i=TICKETS.findIndex(x=>x.id===t.id); if(i>=0) TICKETS[i]=p;
+    }catch(e){ toast("순서 저장 일부 실패 — 새로고침 해주세요"); }
+  }
+}
+function moveCard(id,dir){
+  const t=TICKETS.find(x=>x.id===id); if(!t) return;
+  const ids=columnList(t.status).map(x=>x.id);
+  const i=ids.indexOf(id), j=i+(dir==="up"?-1:1);
+  if(j<0||j>=ids.length) return;
+  [ids[i],ids[j]]=[ids[j],ids[i]];
+  persistOrder(t.status, ids);
+}
+function dropReorder(dragId,targetId){
+  const dt=TICKETS.find(x=>x.id===dragId), tt=TICKETS.find(x=>x.id===targetId);
+  if(!dt||!tt||dt.status!==tt.status) return;   // 같은 레인 안에서만 재정렬
+  const ids=columnList(dt.status).map(x=>x.id).filter(id=>id!==dragId);
+  const ti=ids.indexOf(targetId); if(ti<0) return;
+  ids.splice(ti,0,dragId);
+  persistOrder(dt.status, ids);
+}
 async function addComment(){
   if(!EDIT)return; const text=$("#cmt-text").value.trim(); if(!text){toast("내용을 입력하세요");return;}
   const c=getCfg(); const line=`- [${today()} · ${c.displayName||"익명"}] ${text.replace(/\s*\n+\s*/g,"; ")}`;
@@ -608,10 +652,17 @@ document.addEventListener("DOMContentLoaded",()=>{
   $$(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
   // 보드 클릭 위임
   $("#main").addEventListener("click",e=>{
+    const re=e.target.closest("[data-reorder]"); if(re){e.stopPropagation();const [id,dir]=re.dataset.reorder.split("|");moveCard(id,dir);return;}
     const mv=e.target.closest("[data-move]"); if(mv){e.stopPropagation();const [id,st]=mv.dataset.move.split("|");moveTicket(id,st);return;}
     const op=e.target.closest("[data-open]"); if(op){const t=TICKETS.find(x=>x.id===op.dataset.open);if(t)openDetail(t);return;}
     const oa=e.target.closest("[data-openarch]"); if(oa){const t=ARCHIVED.find(x=>x.id===oa.dataset.openarch);if(t){openDetail(t);$("#t-archive").style.display="none";$("#tm-statusrow").style.display="none";}return;}
   });
+  // 드래그앤드롭 재정렬 (데스크톱)
+  let DRAG=null;
+  $("#main").addEventListener("dragstart",e=>{const c=e.target.closest(".card[data-id]");if(c){DRAG=c.dataset.id;c.classList.add("dragging");if(e.dataTransfer)e.dataTransfer.effectAllowed="move";}});
+  $("#main").addEventListener("dragend",e=>{const c=e.target.closest(".card");if(c)c.classList.remove("dragging");DRAG=null;});
+  $("#main").addEventListener("dragover",e=>{if(DRAG){const c=e.target.closest(".card[data-id]");if(c&&c.dataset.id!==DRAG)e.preventDefault();}});
+  $("#main").addEventListener("drop",e=>{if(!DRAG)return;const c=e.target.closest(".card[data-id]");if(c&&c.dataset.id!==DRAG){e.preventDefault();dropReorder(DRAG,c.dataset.id);}DRAG=null;});
   refresh();
 });
 </script>
