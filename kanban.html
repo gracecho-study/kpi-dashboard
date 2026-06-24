@@ -4,8 +4,10 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f172a" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24 -->
+<!-- build: auto-deploy 2026-06-24b -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -369,14 +371,15 @@ function autoTitle(){
   return g.length>60?g.slice(0,58)+"…":g;
 }
 async function mutateTicket(path, mutator, msg){
-  // 항상 최신 sha로 기록해 409(sha 불일치) 방지. 원격 최신 내용에 변경만 재적용.
-  for(let attempt=0; attempt<3; attempt++){
+  // 항상 최신 sha로 기록해 409(sha 불일치) 방지. GitHub 반영 지연 대비 재시도 사이에 텀을 둠.
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+  for(let attempt=0; attempt<4; attempt++){
     const fresh=await getFile(path);
     if(!fresh) throw new Error("티켓 파일을 찾을 수 없습니다");
     const p=parseTicket(fresh.text,{sha:fresh.sha,path});
     mutator(p);
     try{ const res=await putFile(path, serialize(p), msg, fresh.sha); p.sha=res?.content?.sha; return p; }
-    catch(e){ if(e.status===409 && attempt<2) continue; throw e; }
+    catch(e){ if(e.status===409 && attempt<3){ await sleep(400*(attempt+1)); continue; } throw e; }
   }
 }
 async function saveTicket(){

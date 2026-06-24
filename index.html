@@ -4,8 +4,10 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#0f172a" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24 -->
+<!-- build: auto-deploy 2026-06-24b -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -577,9 +579,13 @@ function renderToday(s){
   if(!t || (!t.done.length && !t.doing.length && !t.blockers.length)){
     body=`<div class="empty">${s.todayUsed?`(${esc(s.todayUsed)}) 기록 없음`:"오늘 로그 없음"} — 우상단 ＋공유로 기록하세요.</div>`;
   } else {
+    // 같은 제목은 더 진행된 상태만 표시: 완료 > 진행중 (중복 줄 합치기)
+    const seen=new Set();
+    const uniq=(arr)=>arr.filter(x=>{ const k=(x.title||"").trim(); if(!k||seen.has(k))return false; seen.add(k); return true; });
+    const doneU=uniq(t.done), doingU=uniq(t.doing);
     const li=(arr,icon)=>arr.map(x=>`<li>${icon} ${esc(x.title||x)} ${x.kpi?`<span class="kpi-pill">${esc(x.kpi)}</span>`:""} ${x.tag?`<span class="tag ${/pro/.test(x.tag)?"proactive":"reactive"}">${esc(x.tag)}</span>`:""}</li>`).join("");
     body=`<ul class="clean">
-      ${li(t.done,"✅")}${li(t.doing,"🟦")}
+      ${li(doneU,"✅")}${li(doingU,"🟦")}
       ${t.blockers.map(b=>`<li>⛔ ${esc(b)}</li>`).join("")}
     </ul>`;
   }
