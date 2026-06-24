@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24l (no-weekly+badgefix) -->
+<!-- build: auto-deploy 2026-06-24m (task-label) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -105,7 +105,7 @@
     </div>
     <div class="grow"></div>
     <a class="navlink" href="index.html">← KPI 대시보드</a>
-    <button class="icon primary" id="btn-new">＋ 티켓</button>
+    <button class="icon primary" id="btn-new">＋ Task</button>
     <button class="icon" id="btn-refresh" title="새로고침">↻</button>
     <button class="icon" id="btn-settings" title="설정">⚙</button>
   </div>
@@ -120,10 +120,10 @@
   <div class="center" id="boot"><div class="spin"></div><div class="hint">불러오는 중…</div></div>
 </main>
 
-<!-- 새 티켓 / 상세 모달 -->
+<!-- 새 Task / 상세 모달 -->
 <div class="modal-bg" id="ticket-modal">
   <div class="modal">
-    <h3 id="tm-title">새 티켓</h3>
+    <h3 id="tm-title">새 Task</h3>
     <div id="tm-mode" class="tabs" style="padding:0 0 8px; margin:0">
       <button type="button" data-mode="manual" class="active">✍️ 직접 작성</button>
       <button type="button" data-mode="tasque">🐺 타스케팀 작성</button>
@@ -148,7 +148,7 @@
           <option value="done">완료</option>
         </select>
       </div>
-      <div><label class="fld">티켓 ID</label><input id="t-id" disabled /></div>
+      <div><label class="fld">Task ID</label><input id="t-id" disabled /></div>
     </div>
 
     <label class="fld">사실 (관찰된 현상)</label>
@@ -270,7 +270,7 @@ async function listDir(d){const c=getCfg();try{const r=await gh(`contents/${enco
 async function putFile(p,text,msg,sha){const c=getCfg();const body={message:msg,content:b64enc(text),branch:c.branch};if(sha)body.sha=sha;return gh(`contents/${encodeURI(p)}`,{method:"PUT",body:JSON.stringify(body)});}
 async function delFile(p,sha,msg){const c=getCfg();return gh(`contents/${encodeURI(p)}`,{method:"DELETE",body:JSON.stringify({message:msg,sha,branch:c.branch})});}
 
-/* ───── 티켓 직렬화/파싱 ───── */
+/* ───── Task 직렬화/파싱 ───── */
 function serialize(t){
   const fm=[`id: ${t.id}`,`title: ${t.title||""}`,`status: ${t.status||"todo"}`,`kpi: ${t.kpi||"기타"}`,
     `owner: ${t.owner||""}`,`impact: ${t.impact??""}`,`effort: ${t.effort??""}`,`due: ${t.due||""}`,`tag: ${t.tag||"proactive"}`,`order: ${t.order??""}`,
@@ -360,7 +360,7 @@ function renderKPI(){
   const groups=[...KPIS.map(k=>k.id),"기타"];
   const used=[...new Set(TICKETS.map(t=>t.kpi))];
   const order=[...groups.filter(g=>used.includes(g)),...used.filter(u=>!groups.includes(u))];
-  if(!order.length)return `<div class="empty">티켓이 없습니다. 우상단 ＋티켓으로 추가하세요.</div>`;
+  if(!order.length)return `<div class="empty">Task이 없습니다. 우상단 ＋Task으로 추가하세요.</div>`;
   return order.map(g=>{
     const list=TICKETS.filter(t=>t.kpi===g);
     const done=list.filter(t=>t.status==="done").length, doing=list.filter(t=>t.status==="doing").length;
@@ -379,7 +379,7 @@ function renderKPI(){
   }).join("");
 }
 function renderArchive(){
-  if(!ARCHIVED.length)return `<div class="empty">보관된 티켓이 없습니다. (완료 티켓은 회고 때 아카이빙됩니다)</div>`;
+  if(!ARCHIVED.length)return `<div class="empty">보관된 Task이 없습니다. (완료 Task은 회고 때 아카이빙됩니다)</div>`;
   return `<div class="klist">${ARCHIVED.map(t=>`<div class="card" data-openarch="${t.id}">
     <div class="t">${esc(t.title||t.goal)}</div>
     <div class="meta">${kpiPill(t.kpi)}<span class="status-chip done">완료·보관</span>
@@ -388,11 +388,11 @@ function renderArchive(){
 }
 function render(){
   const c=getCfg();
-  $("#ctx-sub").textContent=`${c.owner}/${c.repo} · 티켓 ${TICKETS.length}개${c.displayName?` · ${c.displayName}`:""}`;
+  $("#ctx-sub").textContent=`${c.owner}/${c.repo} · Task ${TICKETS.length}개${c.displayName?` · ${c.displayName}`:""}`;
   $("#main").innerHTML = VIEW==="board"?renderBoard():VIEW==="kpi"?renderKPI():renderArchive();
 }
 
-/* ───── 티켓 모달 ───── */
+/* ───── Task 모달 ───── */
 function fillKpiSelect(sel,val){
   sel.innerHTML=KPIS.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("")+`<option value="기타">기타 (KPI 무관)</option>`;
   sel.value=val||(KPIS[0]?.id||"기타");
@@ -403,7 +403,7 @@ function setTicketMode(mode){
 }
 function openNew(){
   EDIT=null;
-  $("#tm-title").textContent="새 티켓";
+  $("#tm-title").textContent="새 Task";
   ["t-fact","t-result","t-problem","t-goal","t-requester","t-title","tq-problem","t-owner","t-due","t-impact","t-effort"].forEach(id=>$("#"+id).value="");
   $("#tq-status").textContent="";
   fillKpiSelect($("#t-kpi"));
@@ -416,7 +416,7 @@ function openNew(){
 function openDetail(t){
   EDIT=t;
   $("#tm-mode").style.display="none"; $("#tasque-panel").style.display="none";
-  $("#tm-title").textContent=`티켓 · ${t.id}`;
+  $("#tm-title").textContent=`Task · ${t.id}`;
   $("#t-fact").value=t.fact; $("#t-result").value=t.result; $("#t-problem").value=t.problem;
   $("#t-goal").value=t.goal; $("#t-requester").value=t.requester; $("#t-title").value=t.title;
   $("#t-owner").value=t.owner||""; $("#t-due").value=t.due||"";
@@ -446,7 +446,7 @@ async function mutateTicket(path, mutator, msg){
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   for(let attempt=0; attempt<4; attempt++){
     const fresh=await getFile(path);
-    if(!fresh) throw new Error("티켓 파일을 찾을 수 없습니다");
+    if(!fresh) throw new Error("Task 파일을 찾을 수 없습니다");
     const p=parseTicket(fresh.text,{sha:fresh.sha,path});
     mutator(p);
     try{ const res=await putFile(path, serialize(p), msg, fresh.sha); p.sha=res?.content?.sha; return p; }
@@ -532,7 +532,7 @@ async function addComment(){
   finally{btn.disabled=false;}
 }
 async function archiveTicket(){
-  if(!EDIT||!confirm("이 완료 티켓을 보관함으로 옮길까요?"))return;
+  if(!EDIT||!confirm("이 완료 Task을 보관함으로 옮길까요?"))return;
   try{
     const arch={...EDIT,status:"archived"};
     await putFile(`assistant/tickets/archive/${EDIT.id}.md`,serialize(arch),`ticket: ${EDIT.id} 아카이브`);
@@ -542,7 +542,7 @@ async function archiveTicket(){
   }catch(e){toast("아카이브 실패: "+(e.message||e));}
 }
 async function deleteTicket(){
-  if(!EDIT||!confirm("이 티켓을 완전히 삭제할까요? (되돌릴 수 없음)"))return;
+  if(!EDIT||!confirm("이 Task을 완전히 삭제할까요? (되돌릴 수 없음)"))return;
   try{ const fresh=await getFile(EDIT.path); await delFile(EDIT.path, fresh?.sha||EDIT.sha, `ticket: ${EDIT.id} 삭제`); closeAll(); await refresh(); toast("삭제됨"); }
   catch(e){toast("삭제 실패: "+(e.message||e));}
 }
@@ -578,10 +578,10 @@ function showNeedSetup(){
 }
 
 /* ───── 이벤트 ───── */
-/* ───── 타스케팀 (티켓 자동작성) ───── */
+/* ───── 타스케팀 (Task 자동작성) ───── */
 const TASQUE_SYSTEM =
 "너는 '타스케 팀'이다. 책 '생각하는 늑대 타스케'의 사고법으로 무장한 기획 통찰 분석가다.\n"+
-"클라이언트가 문제 상황을 주면 되묻지 말고 스스로 분석해, 아래 티켓 필드 JSON 하나로만 답한다.\n\n"+
+"클라이언트가 문제 상황을 주면 되묻지 말고 스스로 분석해, 아래 Task 필드 JSON 하나로만 답한다.\n\n"+
 "[사고 원칙]\n"+
 "1. 사실(Fact)·결과(Result)·문제(Problem)를 분리한다. 진짜 통찰은 사실과 결과 '사이'에 숨은 진짜 문제다.\n"+
 "2. 클라이언트가 말한 표면 진단은 일단 의심한다. 표면 원인이 아니라 근본 원인을 찾는다.\n"+
