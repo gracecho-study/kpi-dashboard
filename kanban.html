@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0f172a" />
+<title>개인 칸반보드 · KPI 비서</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
+    --txt:#e2e8f0; --muted:#94a3b8; --accent:#38bdf8; --good:#34d399;
+    --warn:#fbbf24; --bad:#f87171;
+    --todo:#64748b; --doing:#38bdf8; --done:#34d399;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Malgun Gothic",system-ui,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased; padding:0 0 64px;
+  }
+  header.top{position:sticky; top:0; z-index:10; background:rgba(15,23,42,.92);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line); padding:env(safe-area-inset-top) 14px 0;}
+  .top-row{display:flex; align-items:center; gap:10px; height:54px}
+  .top-row h1{font-size:17px; margin:0; font-weight:700}
+  .top-row .sub{font-size:11px; color:var(--muted); font-weight:400}
+  .grow{flex:1}
+  a.navlink{font-size:12px; color:var(--accent); text-decoration:none; border:1px solid var(--line); border-radius:9px; padding:7px 10px}
+  button{font:inherit; cursor:pointer; border:1px solid var(--line); background:var(--panel2); color:var(--txt); border-radius:10px; padding:8px 12px; transition:.15s}
+  button:hover{border-color:var(--accent)}
+  button.icon{padding:8px 10px; font-size:15px}
+  button.primary{background:var(--accent); color:#04293b; border-color:var(--accent); font-weight:600}
+  button.ghost{background:transparent}
+  button.sm{padding:4px 8px; font-size:12px; border-radius:8px}
+  .tabs{display:flex; gap:6px; padding:10px 14px 0; max-width:1200px; margin:0 auto; flex-wrap:wrap}
+  .tabs button{border-radius:99px; font-size:13px; padding:6px 14px}
+  .tabs button.active{background:var(--accent); color:#04293b; border-color:var(--accent); font-weight:600}
+  main{max-width:1200px; margin:0 auto; padding:14px}
+  /* board */
+  .board{display:flex; gap:12px; align-items:flex-start; overflow-x:auto; padding-bottom:8px}
+  .col{flex:1 0 280px; min-width:280px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:10px}
+  .col > h2{font-size:13px; margin:2px 4px 10px; display:flex; align-items:center; gap:8px}
+  .dot{width:9px; height:9px; border-radius:99px; display:inline-block}
+  .col.todo .dot{background:var(--todo)} .col.doing .dot{background:var(--doing)} .col.done .dot{background:var(--done)}
+  .count{margin-left:auto; font-size:11px; color:var(--muted); background:var(--panel2); border-radius:99px; padding:1px 8px}
+  .card{background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:11px; margin-bottom:9px; cursor:pointer; transition:.12s}
+  .card:hover{border-color:var(--accent)}
+  .card .t{font-size:13.5px; font-weight:600; line-height:1.4}
+  .card .meta{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; align-items:center}
+  .pill{font-size:10px; border-radius:99px; padding:1px 7px; border:1px solid var(--accent); color:var(--accent); white-space:nowrap}
+  .pill.etc{border-color:var(--muted); color:var(--muted)}
+  .card .move{display:flex; gap:4px; margin-top:8px}
+  .card .move button{flex:1; font-size:11px; padding:3px 0}
+  .reqr{font-size:10px; color:var(--muted)}
+  .cmt-badge{font-size:10px; color:var(--muted)}
+  .empty{color:var(--muted); font-size:12px; padding:10px 4px}
+  /* KPI group */
+  .kgroup{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px; margin-bottom:12px}
+  .kgroup h3{margin:0 0 4px; font-size:14px}
+  .kgroup .gsub{font-size:11px; color:var(--muted); margin-bottom:10px}
+  .kbar{height:6px; background:var(--line); border-radius:99px; overflow:hidden; margin:8px 0 12px; display:flex}
+  .kbar .d{background:var(--done)} .kbar .g{background:var(--doing)}
+  .klist{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:9px}
+  .status-chip{font-size:10px; padding:1px 7px; border-radius:99px}
+  .status-chip.todo{background:rgba(100,116,139,.2); color:#cbd5e1}
+  .status-chip.doing{background:rgba(56,189,248,.18); color:var(--doing)}
+  .status-chip.done{background:rgba(52,211,153,.18); color:var(--done)}
+  /* modal */
+  .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-start; justify-content:center; padding:20px 12px; z-index:50; overflow:auto}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px; width:100%; max-width:560px}
+  .modal h3{margin:0 0 10px; font-size:16px; display:flex; align-items:center; gap:8px}
+  label.fld{display:block; font-size:12px; color:var(--muted); margin:11px 0 4px}
+  input,select,textarea{width:100%; font:inherit; background:var(--bg); color:var(--txt); border:1px solid var(--line); border-radius:9px; padding:9px 10px}
+  textarea{min-height:54px; resize:vertical}
+  .two{display:flex; gap:10px} .two > div{flex:1}
+  .actions{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap}
+  .actions .grow{flex:1}
+  .cmts{margin-top:6px; border-top:1px solid var(--line); padding-top:10px}
+  .cmt{font-size:12.5px; padding:7px 0; border-bottom:1px solid var(--line)}
+  .cmt:last-child{border-bottom:0}
+  .cmt .who{color:var(--muted); font-size:11px; margin-bottom:2px}
+  .hint{font-size:11px; color:var(--muted); line-height:1.5}
+  .toast{position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 16px; font-size:13px; z-index:99; opacity:0; transition:.2s; pointer-events:none; max-width:90vw}
+  .toast.show{opacity:1}
+  .spin{display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent); border-radius:50%; animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .center{display:flex; flex-direction:column; align-items:center; gap:12px; padding:40px 0; text-align:center}
+  .danger{color:var(--bad); border-color:var(--bad)}
+  code{background:var(--panel2); padding:1px 5px; border-radius:5px; font-size:12px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <div>
+      <h1>🗂 개인 칸반보드</h1>
+      <div class="sub" id="ctx-sub">—</div>
+    </div>
+    <div class="grow"></div>
+    <a class="navlink" href="index.html">← KPI 대시보드</a>
+    <button class="icon primary" id="btn-new">＋ 티켓</button>
+    <button class="icon" id="btn-refresh" title="새로고침">↻</button>
+    <button class="icon" id="btn-settings" title="설정">⚙</button>
+  </div>
+  <div class="tabs">
+    <button data-view="board" class="active">상태별 보드</button>
+    <button data-view="kpi">KPI별</button>
+    <button data-view="archive">보관함</button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="center" id="boot"><div class="spin"></div><div class="hint">불러오는 중…</div></div>
+</main>
+
+<!-- 새 티켓 / 상세 모달 -->
+<div class="modal-bg" id="ticket-modal">
+  <div class="modal">
+    <h3 id="tm-title">새 티켓</h3>
+    <label class="fld">사실 (관찰된 현상)</label>
+    <textarea id="t-fact" placeholder="예: 미니보험 가입자는 보장성 보험 가입율이 낮음"></textarea>
+    <label class="fld">결과 (그래서 생긴 일)</label>
+    <textarea id="t-result" placeholder="예: 보장성 보험 실적 저하"></textarea>
+    <label class="fld">문제 (핵심 원인)</label>
+    <textarea id="t-problem" placeholder="예: 미니보험 가입자의 보장성 보험 관여도가 낮음"></textarea>
+    <label class="fld">목표 (할 일/달성 상태)</label>
+    <textarea id="t-goal" placeholder="예: 관여도를 만들 장치를 구상하고 실행안을 계획한다"></textarea>
+    <div class="two">
+      <div>
+        <label class="fld">관련 KPI</label>
+        <select id="t-kpi"></select>
+      </div>
+      <div>
+        <label class="fld">요청자 (선택)</label>
+        <input id="t-requester" placeholder="예: 팀장 / 본인" />
+      </div>
+    </div>
+    <label class="fld">타이틀 <span class="hint">(목표 기반 자동 — 수정 가능)</span></label>
+    <input id="t-title" placeholder="자동 생성" />
+
+    <div class="two" id="tm-statusrow" style="display:none">
+      <div>
+        <label class="fld">상태</label>
+        <select id="t-status">
+          <option value="todo">해야 할 것</option>
+          <option value="doing">하는 중</option>
+          <option value="done">완료</option>
+        </select>
+      </div>
+      <div><label class="fld">티켓 ID</label><input id="t-id" disabled /></div>
+    </div>
+
+    <div class="actions">
+      <button id="t-cancel">취소</button>
+      <button id="t-archive" class="ghost" style="display:none">📦 아카이브</button>
+      <button id="t-delete" class="ghost danger" style="display:none">삭제</button>
+      <div class="grow"></div>
+      <button class="primary" id="t-save">저장</button>
+    </div>
+
+    <!-- 코멘트 (상세 모드에서만) -->
+    <div class="cmts" id="tm-comments" style="display:none">
+      <label class="fld">코멘트 <span class="hint">(토큰을 가진 공유자 모두 열람 가능)</span></label>
+      <div id="cmt-list"></div>
+      <div class="two" style="margin-top:8px; align-items:flex-end">
+        <div style="flex:3"><textarea id="cmt-text" placeholder="특이사항·메모"></textarea></div>
+        <div style="flex:0 0 auto"><button class="sm" id="cmt-add">코멘트 추가</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 설정 모달 -->
+<div class="modal-bg" id="settings-modal">
+  <div class="modal">
+    <h3>설정</h3>
+    <p class="hint">대시보드와 <b>같은 토큰을 공유</b>합니다(이미 입력했으면 자동 적용). 코멘트에 표시될 이름만 추가로 설정하세요.</p>
+    <label class="fld">표시 이름 (코멘트 작성자)</label>
+    <input id="f-name" placeholder="예: grace" />
+    <label class="fld">GitHub Token (PAT)</label>
+    <input id="f-token" type="password" placeholder="github_pat_..." autocomplete="off" />
+    <div class="two">
+      <div><label class="fld">Owner</label><input id="f-owner" placeholder="gracecho-study" /></div>
+      <div><label class="fld">Repo</label><input id="f-repo" placeholder="2020-study" /></div>
+    </div>
+    <label class="fld">Branch</label>
+    <input id="f-branch" placeholder="claude/dreamy-bell-nwgcly" />
+    <div class="actions">
+      <button id="f-clear">토큰 삭제</button>
+      <div class="grow"></div>
+      <button class="primary" id="f-save">저장 &amp; 불러오기</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ───── 설정 (대시보드와 동일 키 공유) ───── */
+const LS_KEY="kpi-dash-cfg";
+const DEF={token:"",owner:"gracecho-study",repo:"2020-study",branch:"claude/dreamy-bell-nwgcly",displayName:""};
+const getCfg=()=>{try{return Object.assign({},DEF,JSON.parse(localStorage.getItem(LS_KEY)||"{}"));}catch(e){return {...DEF};}};
+const setCfg=c=>localStorage.setItem(LS_KEY,JSON.stringify(c));
+
+let TICKETS=[], ARCHIVED=[], KPIS=[], VIEW="board", EDIT=null;
+
+/* ───── 유틸 ───── */
+const $=(s,e=document)=>e.querySelector(s), $$=(s,e=document)=>[...e.querySelectorAll(s)];
+const esc=s=>(s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let tT; const toast=(m,ms=2600)=>{const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(tT);tT=setTimeout(()=>t.classList.remove("show"),ms);};
+const pad=n=>String(n).padStart(2,"0");
+function today(){const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
+function genId(){const d=new Date();return `T-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;}
+function b64dec(b){const s=atob((b||"").replace(/\s/g,""));const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new TextDecoder("utf-8").decode(u);}
+function b64enc(str){const u=new TextEncoder().encode(str);let s="";for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s);}
+
+/* ───── GitHub API ───── */
+async function gh(path,opts={}){
+  const c=getCfg(); if(!c.token){const e=new Error("토큰 없음");e.code="NOTOKEN";throw e;}
+  const r=await fetch(`https://api.github.com/repos/${c.owner}/${c.repo}/${path}`,{...opts,headers:{
+    "Authorization":`Bearer ${c.token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",...(opts.headers||{})}});
+  if(!r.ok){let b="";try{b=(await r.json()).message||"";}catch(_){}
+    const e=new Error(`GitHub ${r.status} ${b}`);e.status=r.status;throw e;}
+  return r.status===204?null:r.json();
+}
+async function getFile(p){const c=getCfg();try{const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);return {text:b64dec(d.content),sha:d.sha};}catch(e){if(e.status===404)return null;throw e;}}
+async function listDir(d){const c=getCfg();try{const r=await gh(`contents/${encodeURI(d)}?ref=${encodeURIComponent(c.branch)}`);return Array.isArray(r)?r:[];}catch(e){if(e.status===404)return [];throw e;}}
+async function putFile(p,text,msg,sha){const c=getCfg();const body={message:msg,content:b64enc(text),branch:c.branch};if(sha)body.sha=sha;return gh(`contents/${encodeURI(p)}`,{method:"PUT",body:JSON.stringify(body)});}
+async function delFile(p,sha,msg){const c=getCfg();return gh(`contents/${encodeURI(p)}`,{method:"DELETE",body:JSON.stringify({message:msg,sha,branch:c.branch})});}
+
+/* ───── 티켓 직렬화/파싱 ───── */
+function serialize(t){
+  const fm=[`id: ${t.id}`,`title: ${t.title||""}`,`status: ${t.status||"todo"}`,`kpi: ${t.kpi||"기타"}`,
+    `requester: ${t.requester||""}`,`created: ${t.created||today()}`,`updated: ${today()}`].join("\n");
+  const body=[`## 사실\n${t.fact||""}`,`## 결과\n${t.result||""}`,`## 문제\n${t.problem||""}`,
+    `## 목표\n${t.goal||""}`,`## 코멘트\n${(t.comments||[]).join("\n")}`].join("\n\n");
+  return `---\n${fm}\n---\n\n${body}\n`;
+}
+function parseTicket(text,meta){
+  const m=text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/); const fm={}; let body=text;
+  if(m){m[1].split(/\n/).forEach(l=>{const mm=l.match(/^(\w+):\s*(.*)$/);if(mm)fm[mm[1]]=mm[2].trim();});body=m[2];}
+  const sec=name=>{const x=body.match(new RegExp(`##\\s*${name}\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)`));return x?x[1].trim():"";};
+  const craw=sec("코멘트");
+  const comments=craw?craw.split(/\n/).map(s=>s.trim()).filter(s=>s.startsWith("-")):[];
+  return {id:fm.id,title:fm.title||"",status:fm.status||"todo",kpi:fm.kpi||"기타",
+    requester:fm.requester||"",created:fm.created||"",updated:fm.updated||"",
+    fact:sec("사실"),result:sec("결과"),problem:sec("문제"),goal:sec("목표"),
+    comments,sha:meta?.sha,path:meta?.path};
+}
+function parseKPI(text){
+  if(!text)return [];const out=[];const re=/^##\s+(KPI-[^:：]+)\s*[:：]\s*(.+)$/gm;let m;
+  while((m=re.exec(text)))out.push({id:m[1].trim(),title:m[2].trim().replace(/—.*$/,"").trim()});
+  return out;
+}
+
+/* ───── 로드 ───── */
+async function loadAll(){
+  const [kpiF,entries,archEntries]=await Promise.all([
+    getFile("assistant/kpi.md"), listDir("assistant/tickets"), listDir("assistant/tickets/archive")]);
+  KPIS=parseKPI(kpiF?.text);
+  const files=entries.filter(e=>e.type==="file"&&/\.md$/.test(e.name)&&e.name!==".gitkeep");
+  TICKETS=await Promise.all(files.map(async e=>{const f=await getFile(e.path);return parseTicket(f.text,{sha:f.sha,path:e.path});}));
+  const af=archEntries.filter(e=>e.type==="file"&&/\.md$/.test(e.name)&&e.name!==".gitkeep");
+  ARCHIVED=await Promise.all(af.map(async e=>{const f=await getFile(e.path);return parseTicket(f.text,{sha:f.sha,path:e.path});}));
+  TICKETS.sort((a,b)=>a.id<b.id?1:-1); ARCHIVED.sort((a,b)=>a.id<b.id?1:-1);
+}
+function kpiLabel(id){const k=KPIS.find(k=>k.id===id);return k?`${k.id}`:id;}
+function kpiPill(id){const etc=id==="기타"||!/^KPI-/.test(id);return `<span class="pill ${etc?"etc":""}" title="${esc((KPIS.find(k=>k.id===id)||{}).title||id)}">${esc(id||"기타")}</span>`;}
+
+/* ───── 렌더 ───── */
+const STATUSES=[["todo","해야 할 것"],["doing","하는 중"],["done","완료"]];
+function cardHTML(t){
+  const order=["todo","doing","done"]; const i=order.indexOf(t.status);
+  const left=i>0?`<button class="sm" data-move="${t.id}|${order[i-1]}">◀</button>`:`<button class="sm" disabled>·</button>`;
+  const right=i<2?`<button class="sm" data-move="${t.id}|${order[i+1]}">▶</button>`:`<button class="sm" disabled>·</button>`;
+  return `<div class="card" data-open="${t.id}">
+    <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
+    <div class="meta">${kpiPill(t.kpi)}${t.requester?`<span class="reqr">📨 ${esc(t.requester)}</span>`:""}
+      ${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+    <div class="move">${left}${right}</div>
+  </div>`;
+}
+function renderBoard(){
+  const cols=STATUSES.map(([key,label])=>{
+    const list=TICKETS.filter(t=>t.status===key);
+    return `<div class="col ${key}"><h2><span class="dot"></span>${label}<span class="count">${list.length}</span></h2>
+      ${list.length?list.map(cardHTML).join(""):`<div class="empty">없음</div>`}</div>`;
+  }).join("");
+  return `<div class="board">${cols}</div>`;
+}
+function renderKPI(){
+  const groups=[...KPIS.map(k=>k.id),"기타"];
+  const used=[...new Set(TICKETS.map(t=>t.kpi))];
+  const order=[...groups.filter(g=>used.includes(g)),...used.filter(u=>!groups.includes(u))];
+  if(!order.length)return `<div class="empty">티켓이 없습니다. 우상단 ＋티켓으로 추가하세요.</div>`;
+  return order.map(g=>{
+    const list=TICKETS.filter(t=>t.kpi===g);
+    const done=list.filter(t=>t.status==="done").length, doing=list.filter(t=>t.status==="doing").length;
+    const k=KPIS.find(k=>k.id===g);
+    const dp=list.length?done/list.length*100:0, gp=list.length?doing/list.length*100:0;
+    return `<div class="kgroup">
+      <h3>${esc(g)} ${k?`<span class="hint">${esc(k.title)}</span>`:""}</h3>
+      <div class="gsub">총 ${list.length} · 완료 ${done} · 진행 ${doing} · 대기 ${list.length-done-doing}</div>
+      <div class="kbar"><div class="d" style="width:${dp}%"></div><div class="g" style="width:${gp}%"></div></div>
+      <div class="klist">${list.map(t=>`<div class="card" data-open="${t.id}">
+        <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
+        <div class="meta"><span class="status-chip ${t.status}">${({todo:"해야 할 것",doing:"하는 중",done:"완료"})[t.status]}</span>
+          ${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+      </div>`).join("")}</div>
+    </div>`;
+  }).join("");
+}
+function renderArchive(){
+  if(!ARCHIVED.length)return `<div class="empty">보관된 티켓이 없습니다. (완료 티켓은 회고 때 아카이빙됩니다)</div>`;
+  return `<div class="klist">${ARCHIVED.map(t=>`<div class="card" data-openarch="${t.id}">
+    <div class="t">${esc(t.title||t.goal)}</div>
+    <div class="meta">${kpiPill(t.kpi)}<span class="status-chip done">완료·보관</span>
+      ${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+  </div>`).join("")}</div>`;
+}
+function render(){
+  const c=getCfg();
+  $("#ctx-sub").textContent=`${c.owner}/${c.repo} · 티켓 ${TICKETS.length}개${c.displayName?` · ${c.displayName}`:""}`;
+  $("#main").innerHTML = VIEW==="board"?renderBoard():VIEW==="kpi"?renderKPI():renderArchive();
+}
+
+/* ───── 티켓 모달 ───── */
+function fillKpiSelect(sel,val){
+  sel.innerHTML=KPIS.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("")+`<option value="기타">기타 (KPI 무관)</option>`;
+  sel.value=val||(KPIS[0]?.id||"기타");
+}
+function openNew(){
+  EDIT=null;
+  $("#tm-title").textContent="새 티켓";
+  ["t-fact","t-result","t-problem","t-goal","t-requester","t-title"].forEach(id=>$("#"+id).value="");
+  fillKpiSelect($("#t-kpi"));
+  $("#tm-statusrow").style.display="none";
+  $("#tm-comments").style.display="none";
+  $("#t-archive").style.display="none"; $("#t-delete").style.display="none";
+  $("#ticket-modal").classList.add("open");
+}
+function openDetail(t){
+  EDIT=t;
+  $("#tm-title").textContent=`티켓 · ${t.id}`;
+  $("#t-fact").value=t.fact; $("#t-result").value=t.result; $("#t-problem").value=t.problem;
+  $("#t-goal").value=t.goal; $("#t-requester").value=t.requester; $("#t-title").value=t.title;
+  fillKpiSelect($("#t-kpi"),t.kpi);
+  $("#tm-statusrow").style.display="flex"; $("#t-status").value=t.status; $("#t-id").value=t.id;
+  $("#tm-comments").style.display="block"; renderComments(t);
+  $("#t-archive").style.display=(t.status==="done")?"inline-block":"none";
+  $("#t-delete").style.display="inline-block";
+  $("#ticket-modal").classList.add("open");
+}
+function renderComments(t){
+  const list=$("#cmt-list");
+  if(!t.comments.length){list.innerHTML=`<div class="hint">아직 코멘트가 없습니다.</div>`;return;}
+  list.innerHTML=t.comments.map(c=>{
+    const m=c.match(/^-\s*\[(.+?)\]\s*(.*)$/);
+    return `<div class="cmt"><div class="who">${m?esc(m[1]):""}</div>${esc(m?m[2]:c.replace(/^-\s*/,""))}</div>`;
+  }).join("");
+}
+function autoTitle(){
+  if($("#t-title").value.trim())return $("#t-title").value.trim();
+  const g=$("#t-goal").value.trim()||$("#t-problem").value.trim();
+  return g.length>60?g.slice(0,58)+"…":g;
+}
+async function saveTicket(){
+  const btn=$("#t-save"); btn.disabled=true; btn.textContent="저장 중…";
+  try{
+    const data={fact:$("#t-fact").value.trim(),result:$("#t-result").value.trim(),
+      problem:$("#t-problem").value.trim(),goal:$("#t-goal").value.trim(),
+      kpi:$("#t-kpi").value,requester:$("#t-requester").value.trim(),title:autoTitle()};
+    if(!data.goal && !data.problem && !data.fact){toast("최소 한 항목은 입력하세요");return;}
+    if(EDIT){
+      const t={...EDIT,...data,status:$("#t-status").value};
+      await putFile(t.path,serialize(t),`ticket: ${t.id} 갱신`,t.sha);
+    }else{
+      const id=genId();
+      const t={id,status:"todo",created:today(),comments:[],...data};
+      await putFile(`assistant/tickets/${id}.md`,serialize(t),`ticket: ${id} 생성`);
+    }
+    closeAll(); await refresh(); toast("✅ 저장됨");
+  }catch(e){toast("실패: "+(e.message||e));}
+  finally{btn.disabled=false; btn.textContent="저장";}
+}
+async function moveTicket(id,status){
+  const t=TICKETS.find(x=>x.id===id); if(!t)return;
+  try{ t.status=status; await putFile(t.path,serialize(t),`ticket: ${t.id} → ${status}`,t.sha); await refresh(); }
+  catch(e){toast("이동 실패: "+(e.message||e)); refresh();}
+}
+async function addComment(){
+  if(!EDIT)return; const text=$("#cmt-text").value.trim(); if(!text){toast("내용을 입력하세요");return;}
+  const c=getCfg(); const line=`- [${today()} · ${c.displayName||"익명"}] ${text}`;
+  const btn=$("#cmt-add"); btn.disabled=true;
+  try{
+    for(let attempt=0;attempt<2;attempt++){
+      const fresh=await getFile(EDIT.path); const p=parseTicket(fresh.text,{sha:fresh.sha,path:EDIT.path});
+      p.comments.push(line);
+      try{ await putFile(EDIT.path,serialize(p),`ticket: ${EDIT.id} 코멘트`,fresh.sha);
+        EDIT=p; renderComments(EDIT); $("#cmt-text").value=""; toast("💬 코멘트 추가됨");
+        const idx=TICKETS.findIndex(x=>x.id===EDIT.id); if(idx>=0)TICKETS[idx]=EDIT; break;
+      }catch(e){ if(e.status===409&&attempt===0)continue; throw e; }
+    }
+  }catch(e){toast("코멘트 실패: "+(e.message||e));}
+  finally{btn.disabled=false;}
+}
+async function archiveTicket(){
+  if(!EDIT||!confirm("이 완료 티켓을 보관함으로 옮길까요?"))return;
+  try{
+    const arch={...EDIT,status:"archived"};
+    await putFile(`assistant/tickets/archive/${EDIT.id}.md`,serialize(arch),`ticket: ${EDIT.id} 아카이브`);
+    await delFile(EDIT.path,EDIT.sha,`ticket: ${EDIT.id} 원본 제거(아카이브)`);
+    closeAll(); await refresh(); toast("📦 보관함으로 이동");
+  }catch(e){toast("아카이브 실패: "+(e.message||e));}
+}
+async function deleteTicket(){
+  if(!EDIT||!confirm("이 티켓을 완전히 삭제할까요? (되돌릴 수 없음)"))return;
+  try{ await delFile(EDIT.path,EDIT.sha,`ticket: ${EDIT.id} 삭제`); closeAll(); await refresh(); toast("삭제됨"); }
+  catch(e){toast("삭제 실패: "+(e.message||e));}
+}
+const closeAll=()=>$$(".modal-bg").forEach(m=>m.classList.remove("open"));
+
+/* ───── 설정 ───── */
+function openSettings(){const c=getCfg();$("#f-name").value=c.displayName;$("#f-token").value=c.token;
+  $("#f-owner").value=c.owner;$("#f-repo").value=c.repo;$("#f-branch").value=c.branch;$("#settings-modal").classList.add("open");}
+
+/* ───── 새로고침 ───── */
+async function refresh(){
+  const c=getCfg();
+  if(!c.token){showNeedSetup();return;}
+  $("#main").innerHTML=`<div class="center"><div class="spin"></div><div class="hint">불러오는 중…</div></div>`;
+  try{await loadAll();render();}
+  catch(e){
+    if(e.code==="NOTOKEN"){showNeedSetup();return;}
+    $("#main").innerHTML=`<div class="kgroup"><h3>오류</h3><p class="hint">${esc(e.message||e)}</p>
+      <p class="hint">토큰 권한(Contents R/W)·owner·repo·branch를 확인하세요.</p>
+      <button class="primary" id="e-set">설정 열기</button></div>`;
+    $("#e-set").onclick=openSettings;
+  }
+}
+function showNeedSetup(){
+  $("#ctx-sub").textContent="설정 필요";
+  $("#main").innerHTML=`<div class="kgroup"><h3>시작하기</h3>
+    <p class="hint">대시보드에서 토큰을 이미 입력했다면 자동 적용됩니다. 아직이면 설정에서 입력하세요.
+    코멘트 작성자 <b>표시 이름</b>도 설정하면 좋습니다.</p>
+    <button class="primary" id="ns-set">설정 열기</button></div>`;
+  $("#ns-set").onclick=openSettings;
+}
+
+/* ───── 이벤트 ───── */
+document.addEventListener("DOMContentLoaded",()=>{
+  $("#btn-new").onclick=()=>{if(!getCfg().token){toast("먼저 설정에서 토큰을 등록하세요");openSettings();return;}openNew();};
+  $("#btn-refresh").onclick=refresh;
+  $("#btn-settings").onclick=openSettings;
+  $$(".tabs button").forEach(b=>b.onclick=()=>{VIEW=b.dataset.view;$$(".tabs button").forEach(x=>x.classList.toggle("active",x===b));render();});
+  $("#t-cancel").onclick=closeAll;
+  $("#t-save").onclick=saveTicket;
+  $("#t-archive").onclick=archiveTicket;
+  $("#t-delete").onclick=deleteTicket;
+  $("#cmt-add").onclick=addComment;
+  $("#f-save").onclick=()=>{const c=getCfg();
+    c.displayName=$("#f-name").value.trim(); c.token=$("#f-token").value.trim()||c.token;
+    c.owner=$("#f-owner").value.trim()||DEF.owner; c.repo=$("#f-repo").value.trim()||DEF.repo;
+    c.branch=$("#f-branch").value.trim()||DEF.branch; setCfg(c); closeAll(); refresh();};
+  $("#f-clear").onclick=()=>{const c=getCfg();c.token="";setCfg(c);$("#f-token").value="";toast("토큰 삭제됨");};
+  $$(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
+  // 보드 클릭 위임
+  $("#main").addEventListener("click",e=>{
+    const mv=e.target.closest("[data-move]"); if(mv){e.stopPropagation();const [id,st]=mv.dataset.move.split("|");moveTicket(id,st);return;}
+    const op=e.target.closest("[data-open]"); if(op){const t=TICKETS.find(x=>x.id===op.dataset.open);if(t)openDetail(t);return;}
+    const oa=e.target.closest("[data-openarch]"); if(oa){const t=ARCHIVED.find(x=>x.id===oa.dataset.openarch);if(t){openDetail(t);$("#t-archive").style.display="none";$("#tm-statusrow").style.display="none";}return;}
+  });
+  refresh();
+});
+</script>
+</body>
+</html>
