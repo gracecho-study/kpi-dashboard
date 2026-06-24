@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24g (kpi-measure) -->
+<!-- build: auto-deploy 2026-06-24h (task-model) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -129,6 +129,16 @@
   .kv{display:flex; gap:8px; margin:3px 0; font-size:13.5px}
   .kv .kvk{color:var(--muted); flex:0 0 38px}
   .kv .kvv{font-weight:600}
+  .addbtn{margin-left:auto; font-size:12px; padding:4px 11px; border-radius:99px}
+  .task-group{margin-bottom:8px}
+  .task-gh{font-size:11px; color:var(--muted); margin:8px 0 2px; display:flex; align-items:center; gap:6px; text-transform:none; letter-spacing:0}
+  ul.tasks li.task-row{cursor:pointer; align-items:center; gap:8px; flex-wrap:wrap}
+  ul.tasks li.task-row:hover{background:rgba(56,189,248,.06)}
+  .task-t{flex:1 1 140px; font-weight:500}
+  .task-meta{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
+  .owner{font-size:10px; color:var(--muted); border:1px solid var(--line); border-radius:99px; padding:1px 7px; white-space:nowrap}
+  .count{font-size:10px; color:var(--muted); background:var(--panel2); border-radius:99px; padding:0 7px}
+  .kpi .owner{margin-left:6px}
 </style>
 </head>
 <body>
@@ -350,7 +360,7 @@ function parseKPI(text){
       id:k.id, title:k.title,
       goal:f["목표/측정지표"]||"", current:f["현재값"]||"",
       weight:parseInt((f["가중치(1~5)"]||"").match(/\d/)||["3"],10),
-      measure:f["측정방식"]||"", memo:f["메모"]||""
+      measure:f["측정방식"]||"", owner:f["오너"]||"", memo:f["메모"]||""
     });
   });
   return out;
@@ -379,7 +389,7 @@ function parseTaskLine(line){
   const parts=body.split("|").map(s=>s.trim());
   const t={ done, title:parts[0]||"" };
   parts.slice(1).forEach(p=>{
-    const mm=p.match(/^(KPI|임팩트|노력|마감|태그|시간)\s*[:：]\s*(.+)$/);
+    const mm=p.match(/^(KPI|임팩트|노력|마감|태그|시간|상태|오너|실행)\s*[:：]\s*(.+)$/);
     if(mm){
       const k=mm[1], v=mm[2].trim();
       if(k==="KPI") t.kpi=v;
@@ -388,8 +398,14 @@ function parseTaskLine(line){
       else if(k==="마감") t.due=v;
       else if(k==="태그") t.tag=v;
       else if(k==="시간") t.hours=parseFloat(v);
+      else if(k==="상태") t.status=v;
+      else if(k==="오너"||k==="실행") t.owner=v;
     }
   });
+  // 상태 정규화: 완료([x] 또는 상태:완료) > 진행 > 대기
+  t.state = (t.done||/완료|done/i.test(t.status||"")) ? "완료"
+          : /진행|doing/i.test(t.status||"") ? "진행" : "대기";
+  if(t.state==="완료") t.done=true;
   return t;
 }
 function parseBacklog(text){
@@ -521,7 +537,7 @@ function renderKPIs(kpis){
   const cards = kpis.map(k=>{
     const bar=kpiBar(k);
     return `<div class="kpi" data-kpi="${esc(k.id)}">
-      <div class="id">${esc(k.id)}<span class="more">상세 ›</span></div>
+      <div class="id">${esc(k.id)}${k.owner?ownerBadge(k.owner):""}<span class="more">상세 ›</span></div>
       <div class="title">${esc(k.title)}</div>
       <div class="nums">
         <span>현재 <b>${esc(k.current||"—")}</b></span>
@@ -606,24 +622,95 @@ function renderToday(s){
     <div style="margin-top:14px">${ratioBar()}</div></section>`;
 }
 
+function ownerBadge(o){ return o?`<span class="owner">${o==="본인"?"🙋 본인":"👤 "+esc(o)}</span>`:""; }
 function renderBacklog(s){
-  if(!s.backlog.length) return "";
   const km=kpiMapById(s.kpis);
-  const scored=s.backlog.filter(t=>!t.done)
-    .map(t=>({t, sc:scoreTask(t,km,s.cfg.w)}))
-    .sort((a,b)=>b.sc-a.sc).slice(0,8);
-  const rows=scored.map(({t,sc})=>`<tr>
-    <td>${esc(t.title)}</td>
-    <td>${t.kpi?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}</td>
-    <td class="small">${t.impact??"—"}/${t.effort??"—"}</td>
-    <td>${t.tag?`<span class="tag ${/pro/.test(t.tag)?"proactive":"reactive"}">${esc(t.tag)}</span>`:""}</td>
-    <td><b>${sc.toFixed(0)}</b></td>
-  </tr>`).join("");
-  return `<section class="card"><h2>백로그 우선순위 (점수순)</h2>
-    <table><thead><tr><th>업무</th><th>KPI</th><th>임팩트/노력</th><th>태그</th><th>점수</th></tr></thead>
-    <tbody>${rows}</tbody></table>
-    <div class="small" style="margin-top:8px">점수 = KPI가중치·${s.cfg.w.kpi} + 임팩트·${s.cfg.w.impact} + 긴급도·${s.cfg.w.urgency} − 노력·${s.cfg.w.effort}</div>
+  const tasks=s.backlog.map((t,i)=>({...t,_i:i, sc:scoreTask(t,km,s.cfg.w)}));
+  const groups=[["진행","🟦 진행중"],["대기","⬜ 대기"],["완료","✅ 완료"]];
+  const chip=st=>({대기:"todo",진행:"doing",완료:"done"})[st]||"todo";
+  const rowFor=t=>`<li class="task-row" data-ti="${t._i}">
+    <span class="sc ${chip(t.state)}">${t.state}</span>
+    <span class="task-t">${esc(t.title)}</span>
+    <span class="task-meta">${t.kpi?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}${ownerBadge(t.owner)}<span class="small">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span></span>
+  </li>`;
+  const sections=groups.map(([st,label])=>{
+    const list=tasks.filter(t=>t.state===st).sort((a,b)=>b.sc-a.sc);
+    if(!list.length) return "";
+    const shown = st==="완료" ? list.slice(0,5) : list;
+    return `<div class="task-group"><div class="task-gh">${label} <span class="count">${list.length}</span></div>
+      <ul class="clean tasks">${shown.map(rowFor).join("")}</ul></div>`;
+  }).join("");
+  return `<section class="card"><h2>내 Task 관리 <button class="addbtn" id="task-add">＋ Task</button></h2>
+    ${sections||'<div class="empty">Task 없음 — ＋Task로 추가하세요.</div>'}
+    <div class="small" style="margin-top:8px">행을 누르면 상태·오너·KPI를 바로 수정합니다.</div>
   </section>`;
+}
+function openTaskEdit(i){
+  const t=(i==null)?{title:"",kpi:"",owner:"본인",impact:3,effort:2,due:"",tag:"proactive",state:"대기"}:STATE.backlog[i];
+  const kopts=`<option value="">(미지정)</option>`+STATE.kpis.map(k=>`<option value="${esc(k.id)}"${k.id===t.kpi?" selected":""}>${esc(k.id)} — ${esc(k.title)}</option>`).join("");
+  const stOpt=st=>`<option value="${st}"${t.state===st?" selected":""}>${st}</option>`;
+  $("#kpi-modal-inner").innerHTML=`
+    <h3 style="margin:0 0 12px; font-size:15px">${i==null?"＋ 새 Task":"✏️ Task 수정"}</h3>
+    <label class="fld">업무</label>
+    <textarea id="tk-title" style="min-height:48px">${esc(t.title)}</textarea>
+    <div class="two"><div><label class="fld">KPI</label><select id="tk-kpi">${kopts}</select></div>
+      <div><label class="fld">오너(실행 책임)</label><input id="tk-owner" value="${esc(t.owner||"")}" placeholder="본인/강예미/김근해" /></div></div>
+    <div class="two"><div><label class="fld">상태</label><select id="tk-state">${["대기","진행","완료"].map(stOpt).join("")}</select></div>
+      <div><label class="fld">마감</label><input id="tk-due" value="${esc(t.due||"")}" placeholder="2026-08-31" /></div></div>
+    <div class="two"><div><label class="fld">임팩트(1~5)</label><input id="tk-impact" type="number" min="1" max="5" value="${t.impact??3}" /></div>
+      <div><label class="fld">노력(1~5)</label><input id="tk-effort" type="number" min="1" max="5" value="${t.effort??2}" /></div></div>
+    <label class="fld">태그</label>
+    <select id="tk-tag"><option value="proactive"${/re/.test(t.tag||"")?"":" selected"}>proactive (내 주도)</option><option value="reactive"${/re/.test(t.tag||"")?" selected":""}>reactive (f/up)</option></select>
+    <div class="actions" style="display:flex; gap:8px; margin-top:16px">
+      ${i==null?"":'<button class="danger" id="tk-del">삭제</button>'}
+      <button id="tk-cancel">취소</button><div style="flex:1"></div>
+      <button class="primary" id="tk-save">저장 &amp; 커밋</button>
+    </div>`;
+  openModal("#kpi-modal");
+  $("#tk-cancel").onclick=()=>closeModal("#kpi-modal");
+  $("#tk-save").onclick=()=>saveTask(i);
+  if(i!=null) $("#tk-del").onclick=()=>deleteTask(i);
+}
+function taskLine(t){
+  const box=t.state==="완료"?"[x]":"[ ]";
+  let l=`- ${box} ${t.title} | KPI: ${t.kpi||"—"} | 임팩트:${t.impact} | 노력:${t.effort} | 마감: ${t.due||"—"} | 태그: ${t.tag} | 상태: ${t.state}`;
+  if(t.owner) l+=` | 오너: ${t.owner}`;
+  return l;
+}
+async function saveTask(i){
+  const t={ title:$("#tk-title").value.trim().replace(/\s*\n+\s*/g," "),
+    kpi:$("#tk-kpi").value, owner:$("#tk-owner").value.trim(),
+    state:$("#tk-state").value, due:$("#tk-due").value.trim(),
+    impact:parseInt($("#tk-impact").value,10)||3, effort:parseInt($("#tk-effort").value,10)||2,
+    tag:$("#tk-tag").value };
+  if(!t.title){ toast("업무명을 입력하세요"); return; }
+  const btn=$("#tk-save"); btn.disabled=true; btn.textContent="저장 중…";
+  try{
+    const f=await getFile("assistant/backlog.md"); if(!f) throw new Error("backlog.md 없음");
+    let text=f.text; const newLine=taskLine(t);
+    if(i==null){
+      if(/\n<!--/.test(text)) text=text.replace(/\n<!--/, `\n${newLine}\n\n<!--`);
+      else text=text.replace(/\s*$/,"")+`\n${newLine}\n`;
+    }else{
+      const old=STATE.backlog[i].title;
+      const lineRe=new RegExp("^\\s*-\\s*\\[[ xX]\\][^\\n]*"+escRe(old)+"[^\\n]*$","m");
+      if(!lineRe.test(text)) throw new Error("기존 Task 줄을 못 찾음");
+      text=text.replace(lineRe, newLine);
+    }
+    await putFile("assistant/backlog.md", text, `task: ${t.title.slice(0,30)} ${i==null?"추가":"수정"}`, f.sha);
+    toast("✅ 저장 & 커밋"); closeModal("#kpi-modal"); await refresh();
+  }catch(e){ toast("저장 실패: "+(e.message||e)); btn.disabled=false; btn.textContent="저장 & 커밋"; }
+}
+async function deleteTask(i){
+  if(!confirm("이 Task를 삭제할까요?")) return;
+  try{
+    const f=await getFile("assistant/backlog.md"); let text=f.text;
+    const old=STATE.backlog[i].title;
+    const lineRe=new RegExp("^\\s*-\\s*\\[[ xX]\\][^\\n]*"+escRe(old)+"[^\\n]*\\n","m");
+    text=text.replace(lineRe,"");
+    await putFile("assistant/backlog.md", text, `task: ${old.slice(0,30)} 삭제`, f.sha);
+    toast("🗑 삭제됨"); closeModal("#kpi-modal"); await refresh();
+  }catch(e){ toast("삭제 실패: "+(e.message||e)); }
 }
 
 function bulletize(text){
@@ -668,7 +755,7 @@ function openKpiDetail(id){
     <div class="detail-sec"><h4>현재</h4>${bulletize(k.current)}</div>
     <div class="detail-sec"><h4>목표</h4>${bulletize(k.goal)}</div>
     ${bar?`<div style="margin-top:12px">${bar}</div>`:""}
-    <div class="kv" style="margin-top:12px"><span class="kvk">가중치</span><span class="stars">${"★".repeat(k.weight)}${"☆".repeat(5-k.weight)}</span><span class="small">우선순위</span></div>
+    <div class="kv" style="margin-top:12px"><span class="kvk">가중치</span><span class="stars">${"★".repeat(k.weight)}${"☆".repeat(5-k.weight)}</span>${k.owner?`<span class="owner">${k.owner==="본인"?"🙋 본인":"👤 "+esc(k.owner)}</span>`:""}</div>
     <div class="detail-sec"><h4>진단 · 레버</h4>${formatMemo(k.memo)}</div>
     <div class="detail-sec"><h4>연결된 칸반 티켓 — 해야할것 ${tc("todo")} · 하는중 ${tc("doing")} · 완료 ${tc("done")}</h4>${tlist}</div>
     <div class="detail-sec"><h4>백로그 과제 (grace 주도)</h4>${bllist}</div>
@@ -694,6 +781,8 @@ function openKpiEdit(id){
     <textarea id="ke-current">${esc(k.current)}</textarea>
     <label class="fld">목표/측정지표</label>
     <textarea id="ke-goal">${esc(k.goal)}</textarea>
+    <label class="fld">오너(실행 책임)</label>
+    <input id="ke-owner" value="${esc(k.owner||"")}" placeholder="본인/강예미/김근해" />
     <label class="fld">달성률 측정방식</label>
     <select id="ke-measure">
       <option value=""${/task|태스크|과제|티켓/i.test(k.measure||"")?"":" selected"}>수치 자동 (현재값 ÷ 목표)</option>
@@ -714,7 +803,7 @@ function openKpiEdit(id){
 async function saveKpiEdit(id){
   const fields={ title:$("#ke-title").value, current:$("#ke-current").value,
     goal:$("#ke-goal").value, weight:$("#ke-weight").value, memo:$("#ke-memo").value,
-    measure:$("#ke-measure").value };
+    measure:$("#ke-measure").value, owner:$("#ke-owner").value };
   const btn=$("#ke-save"); btn.disabled=true; btn.textContent="저장 중…";
   try{ await saveKpi(id, fields); toast("✅ 저장 & 커밋됨"); await loadAll(); render(); openKpiDetail(id); }
   catch(e){ toast("저장 실패: "+(e.message||e)); btn.disabled=false; btn.textContent="저장 & 커밋"; }
@@ -739,6 +828,7 @@ async function saveKpi(id, fields){
     setField("목표/측정지표", fields.goal);
     setField("현재값", fields.current);
     setField("가중치(1~5)", fields.weight);
+    setField("오너", fields.owner);
     setField("메모", fields.memo);
     // 측정방식: 기존 줄 있으면 교체, 없으면 제목 다음 줄에 삽입(빈 값이면 생략)
     if(fields.measure!=null){
@@ -762,6 +852,9 @@ function render(){
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
   // KPI 카드 클릭 → 상세 모달
   $$("#main .kpi[data-kpi]").forEach(el=>el.onclick=()=>openKpiDetail(el.dataset.kpi));
+  // Task 관리: 추가 / 행 클릭 편집
+  const addBtn=$("#task-add"); if(addBtn) addBtn.onclick=(e)=>{ e.stopPropagation(); openTaskEdit(null); };
+  $$("#main .task-row").forEach(el=>el.onclick=()=>openTaskEdit(+el.dataset.ti));
 }
 
 /* ───────────────────────── 공유(쓰기) ───────────────────────── */
