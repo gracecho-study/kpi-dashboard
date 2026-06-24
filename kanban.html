@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24c (optimistic move) -->
+<!-- build: auto-deploy 2026-06-24e (tasque) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -122,6 +122,18 @@
 <div class="modal-bg" id="ticket-modal">
   <div class="modal">
     <h3 id="tm-title">새 티켓</h3>
+    <div id="tm-mode" class="tabs" style="padding:0 0 8px; margin:0">
+      <button type="button" data-mode="manual" class="active">✍️ 직접 작성</button>
+      <button type="button" data-mode="tasque">🐺 타스케팀 작성</button>
+    </div>
+    <div id="tasque-panel" style="display:none; background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:12px; margin-bottom:8px">
+      <label class="fld" style="margin-top:0">문제 상황을 던지세요 <span class="hint">(팀장 요청·내가 풀고 싶은 문제 등 — 타스케팀이 사실·결과·진짜 문제·목표로 정리)</span></label>
+      <textarea id="tq-problem" placeholder="예: 미니보험 판매가 늘었는데, 이미 미니보험 가입한 고객에게 보장성 보험 넛지를 줘서 전환율을 높이고 싶다"></textarea>
+      <div class="actions" style="margin-top:8px; align-items:center">
+        <span id="tq-status" class="hint" style="flex:1"></span>
+        <button class="primary sm" id="tq-run">🐺 분석 요청</button>
+      </div>
+    </div>
     <label class="fld">사실 (관찰된 현상)</label>
     <textarea id="t-fact" placeholder="예: 미니보험 가입자는 보장성 보험 가입율이 낮음"></textarea>
     <label class="fld">결과 (그래서 생긴 일)</label>
@@ -182,6 +194,13 @@
     <p class="hint">대시보드와 <b>같은 토큰을 공유</b>합니다(이미 입력했으면 자동 적용). 코멘트에 표시될 이름만 추가로 설정하세요.</p>
     <label class="fld">표시 이름 (코멘트 작성자)</label>
     <input id="f-name" placeholder="예: grace" />
+    <label class="fld">Anthropic API Key <span class="hint">(타스케팀 티켓 자동작성 · 이 브라우저에만 저장)</span></label>
+    <input id="f-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" />
+    <label class="fld">타스케팀 모델</label>
+    <select id="f-model">
+      <option value="claude-sonnet-4-6">Sonnet 4.6 (빠름·저렴, 추천)</option>
+      <option value="claude-opus-4-8">Opus 4.8 (최고 통찰)</option>
+    </select>
     <label class="fld">GitHub Token (PAT)</label>
     <input id="f-token" type="password" placeholder="github_pat_..." autocomplete="off" />
     <div class="two">
@@ -204,7 +223,7 @@
 "use strict";
 /* ───── 설정 (대시보드와 동일 키 공유) ───── */
 const LS_KEY="kpi-dash-cfg";
-const DEF={token:"",owner:"gracecho-study",repo:"2020-study",branch:"claude/dreamy-bell-nwgcly",displayName:""};
+const DEF={token:"",owner:"gracecho-study",repo:"2020-study",branch:"claude/dreamy-bell-nwgcly",displayName:"",anthropicKey:"",tasqueModel:"claude-sonnet-4-6"};
 const getCfg=()=>{try{return Object.assign({},DEF,JSON.parse(localStorage.getItem(LS_KEY)||"{}"));}catch(e){return {...DEF};}};
 const setCfg=c=>localStorage.setItem(LS_KEY,JSON.stringify(c));
 
@@ -335,11 +354,17 @@ function fillKpiSelect(sel,val){
   sel.innerHTML=KPIS.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("")+`<option value="기타">기타 (KPI 무관)</option>`;
   sel.value=val||(KPIS[0]?.id||"기타");
 }
+function setTicketMode(mode){
+  $$("#tm-mode button").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
+  $("#tasque-panel").style.display = mode==="tasque" ? "block" : "none";
+}
 function openNew(){
   EDIT=null;
   $("#tm-title").textContent="새 티켓";
-  ["t-fact","t-result","t-problem","t-goal","t-requester","t-title"].forEach(id=>$("#"+id).value="");
+  ["t-fact","t-result","t-problem","t-goal","t-requester","t-title","tq-problem"].forEach(id=>$("#"+id).value="");
+  $("#tq-status").textContent="";
   fillKpiSelect($("#t-kpi"));
+  $("#tm-mode").style.display="flex"; setTicketMode("manual");
   $("#tm-statusrow").style.display="none";
   $("#tm-comments").style.display="none";
   $("#t-archive").style.display="none"; $("#t-delete").style.display="none";
@@ -347,6 +372,7 @@ function openNew(){
 }
 function openDetail(t){
   EDIT=t;
+  $("#tm-mode").style.display="none"; $("#tasque-panel").style.display="none";
   $("#tm-title").textContent=`티켓 · ${t.id}`;
   $("#t-fact").value=t.fact; $("#t-result").value=t.result; $("#t-problem").value=t.problem;
   $("#t-goal").value=t.goal; $("#t-requester").value=t.requester; $("#t-title").value=t.title;
@@ -445,7 +471,9 @@ const closeAll=()=>$$(".modal-bg").forEach(m=>m.classList.remove("open"));
 
 /* ───── 설정 ───── */
 function openSettings(){const c=getCfg();$("#f-name").value=c.displayName;$("#f-token").value=c.token;
-  $("#f-owner").value=c.owner;$("#f-repo").value=c.repo;$("#f-branch").value=c.branch;$("#settings-modal").classList.add("open");}
+  $("#f-owner").value=c.owner;$("#f-repo").value=c.repo;$("#f-branch").value=c.branch;
+  $("#f-anthropic").value=c.anthropicKey||"";$("#f-model").value=c.tasqueModel||"claude-sonnet-4-6";
+  $("#settings-modal").classList.add("open");}
 
 /* ───── 새로고침 ───── */
 async function refresh(){
@@ -471,6 +499,57 @@ function showNeedSetup(){
 }
 
 /* ───── 이벤트 ───── */
+/* ───── 타스케팀 (티켓 자동작성) ───── */
+const TASQUE_SYSTEM =
+"너는 '타스케 팀'이다. 책 '생각하는 늑대 타스케'의 사고법으로 무장한 기획 통찰 분석가다.\n"+
+"클라이언트가 문제 상황을 주면 되묻지 말고 스스로 분석해, 아래 티켓 필드 JSON 하나로만 답한다.\n\n"+
+"[사고 원칙]\n"+
+"1. 사실(Fact)·결과(Result)·문제(Problem)를 분리한다. 진짜 통찰은 사실과 결과 '사이'에 숨은 진짜 문제다.\n"+
+"2. 클라이언트가 말한 표면 진단은 일단 의심한다. 표면 원인이 아니라 근본 원인을 찾는다.\n"+
+"3. '잘못된 문제의 3징후'로 검증: (1)증상인가 원인인가 (2)이걸 풀면 정말 원하는 결과로 이어지나 (3)실제 사실에서 너무 멀진 않나. 하나라도 걸리면 더 판다.\n"+
+"4. 정보가 부족하면 되묻지 말고 합리적 '가정'으로 명시한 뒤 진행한다.\n"+
+"5. 누구나 떠올릴 '당연한 소리'에서 멈추지 않고 한 겹 더 내려간다.\n\n"+
+"[출력 필드]\n"+
+"- fact: 판단·해석을 뺀 사실만\n"+
+"- result: 그 사실로 생긴(또는 원하는) 결과·상태\n"+
+"- problem: 표면 문제가 아닌, 타스케 팀이 본 '진짜 문제' 한 문장 + 왜 그렇게 보는지 근거 1줄\n"+
+"- goal: 진짜 문제를 풀기 위한 접근 방향과 다음 실행안(구체적·실행가능)\n"+
+"- title: 위를 종합한 12~30자 간결한 한국어 제목\n"+
+"- kpi: 제공된 KPI 목록 중 가장 관련된 id 하나(예 KPI-D). 해당 없으면 정확히 '기타'.\n\n"+
+"오직 JSON만 출력한다. 한국어로 쓴다.";
+async function tasqueGenerate(){
+  const c=getCfg();
+  if(!c.anthropicKey){ toast("설정에서 Anthropic API Key를 먼저 등록하세요"); openSettings(); return; }
+  const problem=$("#tq-problem").value.trim();
+  if(!problem){ toast("문제 상황을 입력하세요"); return; }
+  const btn=$("#tq-run"), st=$("#tq-status");
+  btn.disabled=true; st.textContent="🐺 타스케팀이 분석 중…";
+  try{
+    const kpiList=KPIS.map(k=>k.id+": "+k.title).join("\n")+"\n기타: KPI 무관";
+    const schema={type:"object",additionalProperties:false,
+      required:["title","fact","result","problem","goal","kpi"],
+      properties:{title:{type:"string"},fact:{type:"string"},result:{type:"string"},problem:{type:"string"},goal:{type:"string"},kpi:{type:"string"}}};
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",
+      headers:{"content-type":"application/json","x-api-key":c.anthropicKey,
+        "anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:c.tasqueModel||"claude-sonnet-4-6",max_tokens:1500,
+        system:TASQUE_SYSTEM,
+        messages:[{role:"user",content:"[관련 가능한 KPI 목록]\n"+kpiList+"\n\n[클라이언트 문제]\n"+problem}],
+        output_config:{format:{type:"json_schema",schema}}})});
+    if(!res.ok){ let m=""; try{m=(await res.json()).error?.message||"";}catch(_){ } throw new Error("API "+res.status+" "+m); }
+    const data=await res.json();
+    if(data.stop_reason==="refusal") throw new Error("분석이 거부됨(민감 주제).");
+    const txt=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+    const t=JSON.parse(txt);
+    $("#t-fact").value=t.fact||""; $("#t-result").value=t.result||"";
+    $("#t-problem").value=t.problem||""; $("#t-goal").value=t.goal||""; $("#t-title").value=t.title||"";
+    fillKpiSelect($("#t-kpi"), (t.kpi&&/^KPI-/.test(t.kpi))?t.kpi:"기타");
+    st.textContent=""; setTicketMode("manual");
+    toast("✅ 타스케팀 초안 생성 — 검토·수정 후 저장");
+  }catch(e){ st.textContent=""; toast("타스케팀 실패: "+(e.message||e)); }
+  finally{ btn.disabled=false; }
+}
+
 document.addEventListener("DOMContentLoaded",()=>{
   $("#btn-new").onclick=()=>{if(!getCfg().token){toast("먼저 설정에서 토큰을 등록하세요");openSettings();return;}openNew();};
   $("#btn-refresh").onclick=refresh;
@@ -481,8 +560,11 @@ document.addEventListener("DOMContentLoaded",()=>{
   $("#t-archive").onclick=archiveTicket;
   $("#t-delete").onclick=deleteTicket;
   $("#cmt-add").onclick=addComment;
+  $$("#tm-mode button").forEach(b=>b.onclick=()=>setTicketMode(b.dataset.mode));
+  $("#tq-run").onclick=tasqueGenerate;
   $("#f-save").onclick=()=>{const c=getCfg();
     c.displayName=$("#f-name").value.trim(); c.token=$("#f-token").value.trim()||c.token;
+    c.anthropicKey=$("#f-anthropic").value.trim()||c.anthropicKey; c.tasqueModel=$("#f-model").value||c.tasqueModel;
     c.owner=$("#f-owner").value.trim()||DEF.owner; c.repo=$("#f-repo").value.trim()||DEF.repo;
     c.branch=$("#f-branch").value.trim()||DEF.branch; setCfg(c); closeAll(); refresh();};
   $("#f-clear").onclick=()=>{const c=getCfg();c.token="";setCfg(c);$("#f-token").value="";toast("토큰 삭제됨");};
