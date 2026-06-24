@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24i (mit-today) -->
+<!-- build: auto-deploy 2026-06-24j (task-unify) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -347,6 +347,29 @@ async function putFile(filepath, text, message, sha){
   if(sha) body.sha=sha;
   return gh(`contents/${encodeURI(filepath)}`,{ method:"PUT", body:JSON.stringify(body) });
 }
+async function deleteFile(filepath, sha, message){
+  const c=getCfg();
+  return gh(`contents/${encodeURI(filepath)}`,{ method:"DELETE", body:JSON.stringify({ message, sha, branch:c.branch }) });
+}
+function pad2(n){ return String(n).padStart(2,"0"); }
+function genTid(){ const d=new Date(); return `T-${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`; }
+function ticketSerialize(t){
+  const fm=[`id: ${t.id}`,`title: ${t.title||""}`,`status: ${t.status||"todo"}`,`kpi: ${t.kpi||"기타"}`,
+    `owner: ${t.owner||""}`,`impact: ${t.impact??""}`,`effort: ${t.effort??""}`,`due: ${t.due||""}`,`tag: ${t.tag||"proactive"}`,
+    `requester: ${t.requester||""}`,`created: ${t.created||todayISO()}`,`updated: ${todayISO()}`].join("\n");
+  return `---\n${fm}\n---\n\n## 사실\n\n\n## 결과\n\n\n## 문제\n\n\n## 목표\n\n\n## 코멘트\n`;
+}
+function updateFrontmatter(text, fields){
+  return text.replace(/^---\n([\s\S]*?)\n---/, (mm,fm)=>{
+    let lines=fm.split("\n");
+    Object.entries(fields).forEach(([k,v])=>{
+      const re=new RegExp("^"+k+":\\s*.*$"); const val=(v==null?"":v);
+      if(lines.some(l=>re.test(l))) lines=lines.map(l=>re.test(l)?`${k}: ${val}`:l);
+      else lines.push(`${k}: ${val}`);
+    });
+    return "---\n"+lines.join("\n")+"\n---";
+  });
+}
 
 /* ───────────────────────── 파서 ───────────────────────── */
 function parseKPI(text){
@@ -449,11 +472,19 @@ function parseDaily(text){
   };
 }
 
-function parseTicketLite(text){
+function parseTicketLite(text, meta){
   if(!text) return null;
   const fm={}; const m=text.match(/^---\n([\s\S]*?)\n---/);
   if(m) m[1].split(/\n/).forEach(l=>{ const mm=l.match(/^(\w+):\s*(.*)$/); if(mm) fm[mm[1]]=mm[2].trim(); });
-  return { id:fm.id, title:fm.title||"", status:fm.status||"todo", kpi:fm.kpi||"기타" };
+  const body = text.replace(/^---\n[\s\S]*?\n---/, "");
+  const hasAnalysis = ["사실","결과","문제","목표"].some(k=>{
+    const x=body.match(new RegExp("##\\s*"+k+"\\s*\\n([\\s\\S]*?)(?=\\n##|$)"));
+    return x && x[1].trim();
+  });
+  return { id:fm.id, title:fm.title||"", status:fm.status||"todo", kpi:fm.kpi||"기타",
+    owner:fm.owner||"", impact:fm.impact?parseInt(fm.impact,10):null, effort:fm.effort?parseInt(fm.effort,10):null,
+    due:fm.due||"", tag:fm.tag||"", requester:fm.requester||"", hasAnalysis,
+    sha:meta?.sha, path:meta?.path };
 }
 
 /* ───────────────────────── 점수화 ───────────────────────── */
@@ -506,7 +537,9 @@ async function loadAll(){
   // 칸반 티켓 (KPI별 연결 표시)
   const ticketEntries = await listDir("assistant/tickets");
   const ticketFiles = ticketEntries.filter(e=>e.type==="file" && /\.md$/.test(e.name) && e.name!==".gitkeep");
-  const tickets = (await Promise.all(ticketFiles.map(async e=>parseTicketLite((await getFile(e.path))?.text)))).filter(Boolean);
+  const tickets = (await Promise.all(ticketFiles.map(async e=>{
+    const f=await getFile(e.path); return parseTicketLite(f?.text, {sha:f?.sha, path:e.path});
+  }))).filter(Boolean);
 
   STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed, tickets,
             ratio:{p:pSum,r:rSum,has:hasHours}, hasKpiFile:!!kpiF };
@@ -583,8 +616,8 @@ function pickFocus(s){
     if(active) return {title:active.title, kpi:active.kpi, ie:active.ie, due:active.due, src:"이번 주 1순위"};
   }
   const km=kpiMapById(s.kpis);
-  const cand=s.backlog.filter(t=>t.state!=="완료").map(t=>({t,sc:scoreTask(t,km,s.cfg.w)})).sort((a,b)=>b.sc-a.sc)[0];
-  if(cand) return {title:cand.t.title, kpi:cand.t.kpi, ie:`${cand.t.impact??"—"}/${cand.t.effort??"—"}`, due:cand.t.due, src:"백로그 최우선"};
+  const cand=activeTasks(s).filter(t=>t.status!=="done").map(t=>({t,sc:scoreTask(t,km,s.cfg.w)})).sort((a,b)=>b.sc-a.sc)[0];
+  if(cand) return {title:cand.t.title, kpi:cand.t.kpi, ie:`${cand.t.impact??"—"}/${cand.t.effort??"—"}`, due:cand.t.due, src:"Task 최우선"};
   return null;
 }
 function renderMIT(s){
@@ -655,15 +688,17 @@ function renderToday(s){
 }
 
 function ownerBadge(o){ return o?`<span class="owner">${o==="본인"?"🙋 본인":"👤 "+esc(o)}</span>`:""; }
+function st2state(st){ return ({todo:"대기",doing:"진행",done:"완료"})[st]||"대기"; }
+function activeTasks(s){ return (s.tickets||[]).filter(t=>t.status!=="archived"); }
 function renderBacklog(s){
   const km=kpiMapById(s.kpis);
-  const tasks=s.backlog.map((t,i)=>({...t,_i:i, sc:scoreTask(t,km,s.cfg.w)}));
+  const tasks=activeTasks(s).map(t=>({...t, state:st2state(t.status), sc:scoreTask(t,km,s.cfg.w)}));
   const groups=[["진행","🟦 진행중"],["대기","⬜ 대기"],["완료","✅ 완료"]];
   const chip=st=>({대기:"todo",진행:"doing",완료:"done"})[st]||"todo";
-  const rowFor=t=>`<li class="task-row" data-ti="${t._i}">
+  const rowFor=t=>`<li class="task-row" data-tid="${esc(t.id)}">
     <span class="sc ${chip(t.state)}">${t.state}</span>
-    <span class="task-t">${esc(t.title)}</span>
-    <span class="task-meta">${t.kpi?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}${ownerBadge(t.owner)}<span class="small">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span></span>
+    <span class="task-t">${esc(t.title)}${t.hasAnalysis?' <span class="small" title="타스케팀 분석 있음">📋</span>':""}</span>
+    <span class="task-meta">${t.kpi&&t.kpi!=="기타"?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""}${ownerBadge(t.owner)}<span class="small">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span></span>
   </li>`;
   const sections=groups.map(([st,label])=>{
     const list=tasks.filter(t=>t.state===st).sort((a,b)=>b.sc-a.sc);
@@ -674,73 +709,64 @@ function renderBacklog(s){
   }).join("");
   return `<section class="card"><h2>내 Task 관리 <button class="addbtn" id="task-add">＋ Task</button></h2>
     ${sections||'<div class="empty">Task 없음 — ＋Task로 추가하세요.</div>'}
-    <div class="small" style="margin-top:8px">행을 누르면 상태·오너·KPI를 바로 수정합니다.</div>
+    <div class="small" style="margin-top:8px">행을 누르면 상태·오너·KPI 수정. 📋=타스케팀 분석 있음(칸반에서 작성). 칸반 보드와 같은 Task입니다.</div>
   </section>`;
 }
-function openTaskEdit(i){
-  const t=(i==null)?{title:"",kpi:"",owner:"본인",impact:3,effort:2,due:"",tag:"proactive",state:"대기"}:STATE.backlog[i];
+function openTaskEdit(tid){
+  const t = tid ? (STATE.tickets||[]).find(x=>x.id===tid) : {title:"",kpi:"",owner:"본인",impact:3,effort:2,due:"",tag:"proactive",status:"todo"};
+  if(!t){ toast("Task를 찾지 못함"); return; }
   const kopts=`<option value="">(미지정)</option>`+STATE.kpis.map(k=>`<option value="${esc(k.id)}"${k.id===t.kpi?" selected":""}>${esc(k.id)} — ${esc(k.title)}</option>`).join("");
-  const stOpt=st=>`<option value="${st}"${t.state===st?" selected":""}>${st}</option>`;
+  const stOpt=(v,lab)=>`<option value="${v}"${t.status===v?" selected":""}>${lab}</option>`;
   $("#kpi-modal-inner").innerHTML=`
-    <h3 style="margin:0 0 12px; font-size:15px">${i==null?"＋ 새 Task":"✏️ Task 수정"}</h3>
+    <h3 style="margin:0 0 12px; font-size:15px">${tid?"✏️ Task 수정":"＋ 새 Task"}</h3>
     <label class="fld">업무</label>
     <textarea id="tk-title" style="min-height:48px">${esc(t.title)}</textarea>
     <div class="two"><div><label class="fld">KPI</label><select id="tk-kpi">${kopts}</select></div>
       <div><label class="fld">오너(실행 책임)</label><input id="tk-owner" value="${esc(t.owner||"")}" placeholder="본인/강예미/김근해" /></div></div>
-    <div class="two"><div><label class="fld">상태</label><select id="tk-state">${["대기","진행","완료"].map(stOpt).join("")}</select></div>
+    <div class="two"><div><label class="fld">상태</label><select id="tk-state">${stOpt("todo","대기")}${stOpt("doing","진행")}${stOpt("done","완료")}</select></div>
       <div><label class="fld">마감</label><input id="tk-due" value="${esc(t.due||"")}" placeholder="2026-08-31" /></div></div>
     <div class="two"><div><label class="fld">임팩트(1~5)</label><input id="tk-impact" type="number" min="1" max="5" value="${t.impact??3}" /></div>
       <div><label class="fld">노력(1~5)</label><input id="tk-effort" type="number" min="1" max="5" value="${t.effort??2}" /></div></div>
     <label class="fld">태그</label>
     <select id="tk-tag"><option value="proactive"${/re/.test(t.tag||"")?"":" selected"}>proactive (내 주도)</option><option value="reactive"${/re/.test(t.tag||"")?" selected":""}>reactive (f/up)</option></select>
+    ${t.hasAnalysis?'<div class="small" style="margin-top:8px">📋 타스케팀 분석 있음 — 분석 내용은 <a href="kanban.html">칸반</a>에서 확인·수정</div>':""}
     <div class="actions" style="display:flex; gap:8px; margin-top:16px">
-      ${i==null?"":'<button class="danger" id="tk-del">삭제</button>'}
+      ${tid?'<button class="danger" id="tk-del">삭제</button>':""}
       <button id="tk-cancel">취소</button><div style="flex:1"></div>
       <button class="primary" id="tk-save">저장 &amp; 커밋</button>
     </div>`;
   openModal("#kpi-modal");
   $("#tk-cancel").onclick=()=>closeModal("#kpi-modal");
-  $("#tk-save").onclick=()=>saveTask(i);
-  if(i!=null) $("#tk-del").onclick=()=>deleteTask(i);
+  $("#tk-save").onclick=()=>saveTask(tid);
+  if(tid) $("#tk-del").onclick=()=>deleteTask(tid);
 }
-function taskLine(t){
-  const box=t.state==="완료"?"[x]":"[ ]";
-  let l=`- ${box} ${t.title} | KPI: ${t.kpi||"—"} | 임팩트:${t.impact} | 노력:${t.effort} | 마감: ${t.due||"—"} | 태그: ${t.tag} | 상태: ${t.state}`;
-  if(t.owner) l+=` | 오너: ${t.owner}`;
-  return l;
-}
-async function saveTask(i){
+async function saveTask(tid){
   const t={ title:$("#tk-title").value.trim().replace(/\s*\n+\s*/g," "),
     kpi:$("#tk-kpi").value, owner:$("#tk-owner").value.trim(),
-    state:$("#tk-state").value, due:$("#tk-due").value.trim(),
+    status:$("#tk-state").value, due:$("#tk-due").value.trim(),
     impact:parseInt($("#tk-impact").value,10)||3, effort:parseInt($("#tk-effort").value,10)||2,
     tag:$("#tk-tag").value };
   if(!t.title){ toast("업무명을 입력하세요"); return; }
   const btn=$("#tk-save"); btn.disabled=true; btn.textContent="저장 중…";
   try{
-    const f=await getFile("assistant/backlog.md"); if(!f) throw new Error("backlog.md 없음");
-    let text=f.text; const newLine=taskLine(t);
-    if(i==null){
-      if(/\n<!--/.test(text)) text=text.replace(/\n<!--/, `\n${newLine}\n\n<!--`);
-      else text=text.replace(/\s*$/,"")+`\n${newLine}\n`;
+    if(!tid){
+      t.id=genTid();
+      await putFile(`assistant/tickets/${t.id}.md`, ticketSerialize(t), `task: ${t.title.slice(0,30)} 추가`);
     }else{
-      const old=STATE.backlog[i].title;
-      const lineRe=new RegExp("^\\s*-\\s*\\[[ xX]\\][^\\n]*"+escRe(old)+"[^\\n]*$","m");
-      if(!lineRe.test(text)) throw new Error("기존 Task 줄을 못 찾음");
-      text=text.replace(lineRe, newLine);
+      const cur=(STATE.tickets||[]).find(x=>x.id===tid); if(!cur) throw new Error("Task 없음");
+      const f=await getFile(cur.path); if(!f) throw new Error("Task 파일 없음");
+      const newText=updateFrontmatter(f.text, {title:t.title,status:t.status,kpi:t.kpi||"기타",owner:t.owner,impact:t.impact,effort:t.effort,due:t.due,tag:t.tag,updated:todayISO()});
+      await putFile(cur.path, newText, `task: ${t.title.slice(0,30)} 수정`, f.sha);
     }
-    await putFile("assistant/backlog.md", text, `task: ${t.title.slice(0,30)} ${i==null?"추가":"수정"}`, f.sha);
     toast("✅ 저장 & 커밋"); closeModal("#kpi-modal"); await refresh();
   }catch(e){ toast("저장 실패: "+(e.message||e)); btn.disabled=false; btn.textContent="저장 & 커밋"; }
 }
-async function deleteTask(i){
-  if(!confirm("이 Task를 삭제할까요?")) return;
+async function deleteTask(tid){
+  if(!confirm("이 Task를 삭제할까요? (분석 내용도 함께 삭제됩니다)")) return;
   try{
-    const f=await getFile("assistant/backlog.md"); let text=f.text;
-    const old=STATE.backlog[i].title;
-    const lineRe=new RegExp("^\\s*-\\s*\\[[ xX]\\][^\\n]*"+escRe(old)+"[^\\n]*\\n","m");
-    text=text.replace(lineRe,"");
-    await putFile("assistant/backlog.md", text, `task: ${old.slice(0,30)} 삭제`, f.sha);
+    const cur=(STATE.tickets||[]).find(x=>x.id===tid); if(!cur) throw new Error("Task 없음");
+    const f=await getFile(cur.path); if(!f) throw new Error("Task 파일 없음");
+    await deleteFile(cur.path, f.sha, `task: ${(cur.title||tid).slice(0,30)} 삭제`);
     toast("🗑 삭제됨"); closeModal("#kpi-modal"); await refresh();
   }catch(e){ toast("삭제 실패: "+(e.message||e)); }
 }
@@ -771,16 +797,12 @@ function formatMemo(memo){
 function openKpiDetail(id){
   const s=STATE; const k=s.kpis.find(x=>x.id===id); if(!k) return;
   const bar=kpiBar(k);
-  const tickets=(s.tickets||[]).filter(t=>t.kpi===id);
+  const tickets=activeTasks(s).filter(t=>t.kpi===id);
   const tc=st=>tickets.filter(t=>t.status===st).length;
-  const chip=st=>({todo:"해야할것",doing:"하는중",done:"완료"})[st]||st;
+  const chip=st=>({todo:"대기",doing:"진행",done:"완료"})[st]||st;
   const tlist = tickets.length
-    ? `<ul class="clean">${tickets.map(t=>`<li><span class="sc ${esc(t.status)}">${chip(t.status)}</span> ${esc(t.title||"(제목없음)")}</li>`).join("")}</ul>`
-    : `<div class="empty">연결된 칸반 티켓 없음 — <a href="kanban.html">칸반</a>에서 추가하세요.</div>`;
-  const bl=(s.backlog||[]).filter(t=>t.kpi===id && !t.done);
-  const bllist = bl.length
-    ? `<ul class="clean">${bl.map(t=>`<li>• ${esc(t.title)} <span class="small">${t.impact?`임팩트 ${t.impact}/노력 ${t.effort??"—"}`:""}${t.due?` · ${esc(t.due)}`:""}</span></li>`).join("")}</ul>`
-    : `<div class="empty">백로그 과제 없음.</div>`;
+    ? `<ul class="clean">${tickets.map(t=>`<li><span class="sc ${esc(t.status)}">${chip(t.status)}</span> ${esc(t.title||"(제목없음)")} <span class="task-meta">${ownerBadge(t.owner)}<span class="small">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span></span></li>`).join("")}</ul>`
+    : `<div class="empty">연결된 Task 없음 — Task 관리/칸반에서 추가하세요.</div>`;
   $("#kpi-modal-inner").innerHTML=`
     <h3 style="margin:0 0 2px; font-size:13px; color:var(--accent)">${esc(k.id)}</h3>
     <div style="font-size:16px; font-weight:700; margin-bottom:14px">${esc(k.title)}</div>
@@ -789,8 +811,7 @@ function openKpiDetail(id){
     ${bar?`<div style="margin-top:12px">${bar}</div>`:""}
     <div class="kv" style="margin-top:12px"><span class="kvk">가중치</span><span class="stars">${"★".repeat(k.weight)}${"☆".repeat(5-k.weight)}</span>${k.owner?`<span class="owner">${k.owner==="본인"?"🙋 본인":"👤 "+esc(k.owner)}</span>`:""}</div>
     <div class="detail-sec"><h4>진단 · 레버</h4>${formatMemo(k.memo)}</div>
-    <div class="detail-sec"><h4>연결된 칸반 티켓 — 해야할것 ${tc("todo")} · 하는중 ${tc("doing")} · 완료 ${tc("done")}</h4>${tlist}</div>
-    <div class="detail-sec"><h4>백로그 과제 (grace 주도)</h4>${bllist}</div>
+    <div class="detail-sec"><h4>연결된 Task — 대기 ${tc("todo")} · 진행 ${tc("doing")} · 완료 ${tc("done")}</h4>${tlist}</div>
     <div class="actions" style="display:flex; gap:8px; margin-top:18px">
       <button id="kpi-edit">✏️ 수정</button>
       <button onclick="location.href='kanban.html'">🗂 칸반</button>
@@ -886,7 +907,7 @@ function render(){
   $$("#main .kpi[data-kpi]").forEach(el=>el.onclick=()=>openKpiDetail(el.dataset.kpi));
   // Task 관리: 추가 / 행 클릭 편집
   const addBtn=$("#task-add"); if(addBtn) addBtn.onclick=(e)=>{ e.stopPropagation(); openTaskEdit(null); };
-  $$("#main .task-row").forEach(el=>el.onclick=()=>openTaskEdit(+el.dataset.ti));
+  $$("#main .task-row").forEach(el=>el.onclick=()=>openTaskEdit(el.dataset.tid));
 }
 
 /* ───────────────────────── 공유(쓰기) ───────────────────────── */

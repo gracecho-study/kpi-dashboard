@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24f (tasque+keysync) -->
+<!-- build: auto-deploy 2026-06-24j (task-unify) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -152,6 +152,20 @@
         <input id="t-requester" placeholder="예: 팀장 / 본인" />
       </div>
     </div>
+    <div class="two">
+      <div>
+        <label class="fld">오너 (실행 책임)</label>
+        <input id="t-owner" placeholder="본인 / 강예미 / 김근해" />
+      </div>
+      <div>
+        <label class="fld">마감 (선택)</label>
+        <input id="t-due" placeholder="2026-08-31" />
+      </div>
+    </div>
+    <div class="two">
+      <div><label class="fld">임팩트 (1~5)</label><input id="t-impact" type="number" min="1" max="5" placeholder="3" /></div>
+      <div><label class="fld">노력 (1~5)</label><input id="t-effort" type="number" min="1" max="5" placeholder="2" /></div>
+    </div>
     <label class="fld">타이틀 <span class="hint">(목표 기반 자동 — 수정 가능)</span></label>
     <input id="t-title" placeholder="자동 생성" />
 
@@ -256,6 +270,7 @@ async function delFile(p,sha,msg){const c=getCfg();return gh(`contents/${encodeU
 /* ───── 티켓 직렬화/파싱 ───── */
 function serialize(t){
   const fm=[`id: ${t.id}`,`title: ${t.title||""}`,`status: ${t.status||"todo"}`,`kpi: ${t.kpi||"기타"}`,
+    `owner: ${t.owner||""}`,`impact: ${t.impact??""}`,`effort: ${t.effort??""}`,`due: ${t.due||""}`,`tag: ${t.tag||"proactive"}`,
     `requester: ${t.requester||""}`,`created: ${t.created||today()}`,`updated: ${today()}`].join("\n");
   const body=[`## 사실\n${t.fact||""}`,`## 결과\n${t.result||""}`,`## 문제\n${t.problem||""}`,
     `## 목표\n${t.goal||""}`,`## 코멘트\n${(t.comments||[]).join("\n")}`].join("\n\n");
@@ -268,6 +283,8 @@ function parseTicket(text,meta){
   const craw=sec("코멘트");
   const comments=craw?craw.split(/\n/).map(s=>s.trim()).filter(s=>s.startsWith("-")):[];
   return {id:fm.id,title:fm.title||"",status:fm.status||"todo",kpi:fm.kpi||"기타",
+    owner:fm.owner||"",impact:fm.impact?parseInt(fm.impact,10):null,effort:fm.effort?parseInt(fm.effort,10):null,
+    due:fm.due||"",tag:fm.tag||"",
     requester:fm.requester||"",created:fm.created||"",updated:fm.updated||"",
     fact:sec("사실"),result:sec("결과"),problem:sec("문제"),goal:sec("목표"),
     comments,sha:meta?.sha,path:meta?.path};
@@ -312,8 +329,8 @@ function cardHTML(t){
   const right=i<2?`<button class="sm" data-move="${t.id}|${order[i+1]}">▶</button>`:`<button class="sm" disabled>·</button>`;
   return `<div class="card" data-open="${t.id}">
     <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
-    <div class="meta">${kpiPill(t.kpi)}${t.requester?`<span class="reqr">📨 ${esc(t.requester)}</span>`:""}
-      ${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+    <div class="meta">${kpiPill(t.kpi)}${t.owner?`<span class="reqr">${t.owner==="본인"?"🙋":"👤"} ${esc(t.owner)}</span>`:""}${(t.impact||t.effort)?`<span class="reqr">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span>`:""}
+      ${(t.fact||t.problem||t.goal)?`<span class="cmt-badge">📋 분석</span>`:""}${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
     <div class="move">${left}${right}</div>
   </div>`;
 }
@@ -373,7 +390,7 @@ function setTicketMode(mode){
 function openNew(){
   EDIT=null;
   $("#tm-title").textContent="새 티켓";
-  ["t-fact","t-result","t-problem","t-goal","t-requester","t-title","tq-problem"].forEach(id=>$("#"+id).value="");
+  ["t-fact","t-result","t-problem","t-goal","t-requester","t-title","tq-problem","t-owner","t-due","t-impact","t-effort"].forEach(id=>$("#"+id).value="");
   $("#tq-status").textContent="";
   fillKpiSelect($("#t-kpi"));
   $("#tm-mode").style.display="flex"; setTicketMode("manual");
@@ -388,6 +405,8 @@ function openDetail(t){
   $("#tm-title").textContent=`티켓 · ${t.id}`;
   $("#t-fact").value=t.fact; $("#t-result").value=t.result; $("#t-problem").value=t.problem;
   $("#t-goal").value=t.goal; $("#t-requester").value=t.requester; $("#t-title").value=t.title;
+  $("#t-owner").value=t.owner||""; $("#t-due").value=t.due||"";
+  $("#t-impact").value=t.impact??""; $("#t-effort").value=t.effort??"";
   fillKpiSelect($("#t-kpi"),t.kpi);
   $("#tm-statusrow").style.display="flex"; $("#t-status").value=t.status; $("#t-id").value=t.id;
   $("#tm-comments").style.display="block"; renderComments(t);
@@ -425,8 +444,12 @@ async function saveTicket(){
   try{
     const data={fact:$("#t-fact").value.trim(),result:$("#t-result").value.trim(),
       problem:$("#t-problem").value.trim(),goal:$("#t-goal").value.trim(),
-      kpi:$("#t-kpi").value,requester:$("#t-requester").value.trim(),title:autoTitle()};
-    if(!data.goal && !data.problem && !data.fact){toast("최소 한 항목은 입력하세요");return;}
+      kpi:$("#t-kpi").value,requester:$("#t-requester").value.trim(),
+      owner:$("#t-owner").value.trim(),due:$("#t-due").value.trim(),
+      impact:$("#t-impact").value?parseInt($("#t-impact").value,10):null,
+      effort:$("#t-effort").value?parseInt($("#t-effort").value,10):null,
+      title:autoTitle()};
+    if(!data.title && !data.goal && !data.problem && !data.fact){toast("타이틀 또는 내용을 입력하세요");return;}
     if(EDIT){
       const st=$("#t-status").value;
       await mutateTicket(EDIT.path, p=>{ Object.assign(p,data); p.status=st; }, `ticket: ${EDIT.id} 갱신`);
