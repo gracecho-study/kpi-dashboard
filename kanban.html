@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24e (tasque) -->
+<!-- build: auto-deploy 2026-06-24f (tasque+keysync) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -194,7 +194,7 @@
     <p class="hint">대시보드와 <b>같은 토큰을 공유</b>합니다(이미 입력했으면 자동 적용). 코멘트에 표시될 이름만 추가로 설정하세요.</p>
     <label class="fld">표시 이름 (코멘트 작성자)</label>
     <input id="f-name" placeholder="예: grace" />
-    <label class="fld">Anthropic API Key <span class="hint">(타스케팀 티켓 자동작성 · 이 브라우저에만 저장)</span></label>
+    <label class="fld">Anthropic API Key <span class="hint">(저장 시 비공개 repo에 동기화 → 다른 브라우저는 토큰만 넣으면 자동 로드)</span></label>
     <input id="f-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" />
     <label class="fld">타스케팀 모델</label>
     <select id="f-model">
@@ -279,7 +279,19 @@ function parseKPI(text){
 }
 
 /* ───── 로드 ───── */
+const KEYFILE="assistant/.tasque.json";   // 비공개 repo에만 저장(공개 미러 대상 아님)
+async function syncKeyToRepo(){
+  const c=getCfg(); if(!c.token||!c.anthropicKey) return;
+  const body=JSON.stringify({anthropicKey:c.anthropicKey,tasqueModel:c.tasqueModel||"claude-sonnet-4-6"})+"\n";
+  let sha; try{ const f=await getFile(KEYFILE); sha=f?.sha; }catch(_){ }
+  try{ await putFile(KEYFILE, body, "tasque: API 키 동기화(비공개)", sha); }catch(_){ }
+}
+async function loadKeyFromRepo(){
+  const c=getCfg(); if(c.anthropicKey) return;
+  try{ const f=await getFile(KEYFILE); if(f){ const o=JSON.parse(f.text); if(o.anthropicKey){ c.anthropicKey=o.anthropicKey; if(o.tasqueModel)c.tasqueModel=o.tasqueModel; setCfg(c); } } }catch(_){ }
+}
 async function loadAll(){
+  await loadKeyFromRepo();
   const [kpiF,entries,archEntries]=await Promise.all([
     getFile("assistant/kpi.md"), listDir("assistant/tickets"), listDir("assistant/tickets/archive")]);
   KPIS=parseKPI(kpiF?.text);
@@ -566,7 +578,9 @@ document.addEventListener("DOMContentLoaded",()=>{
     c.displayName=$("#f-name").value.trim(); c.token=$("#f-token").value.trim()||c.token;
     c.anthropicKey=$("#f-anthropic").value.trim()||c.anthropicKey; c.tasqueModel=$("#f-model").value||c.tasqueModel;
     c.owner=$("#f-owner").value.trim()||DEF.owner; c.repo=$("#f-repo").value.trim()||DEF.repo;
-    c.branch=$("#f-branch").value.trim()||DEF.branch; setCfg(c); closeAll(); refresh();};
+    c.branch=$("#f-branch").value.trim()||DEF.branch; setCfg(c); closeAll();
+    if(c.token&&c.anthropicKey){ syncKeyToRepo().then(()=>toast("🔐 API 키를 비공개 repo에 동기화")); }
+    refresh();};
   $("#f-clear").onclick=()=>{const c=getCfg();c.token="";setCfg(c);$("#f-token").value="";toast("토큰 삭제됨");};
   $$(".modal-bg").forEach(bg=>bg.addEventListener("click",e=>{if(e.target===bg)bg.classList.remove("open");}));
   // 보드 클릭 위임
