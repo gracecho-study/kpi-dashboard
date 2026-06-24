@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24b -->
+<!-- build: auto-deploy 2026-06-24c (optimistic move) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -403,8 +403,17 @@ async function saveTicket(){
 }
 async function moveTicket(id,status){
   const t=TICKETS.find(x=>x.id===id); if(!t)return;
-  try{ await mutateTicket(t.path, p=>{ p.status=status; }, `ticket: ${id} → ${status}`); await refresh(); }
-  catch(e){ toast("이동 실패: "+(e.message||e)); refresh(); }
+  const prev=t.status;
+  if(prev===status) return;
+  t.status=status;          // 1) 화면 먼저 이동(낙관적 UI)
+  render();
+  try{
+    const p=await mutateTicket(t.path, x=>{ x.status=status; }, `ticket: ${id} → ${status}`);  // 2) 저장은 뒤에서
+    const idx=TICKETS.findIndex(x=>x.id===id); if(idx>=0) TICKETS[idx]=p;   // 최신 sha 반영
+  }catch(e){
+    t.status=prev; render();   // 3) 진짜 실패할 때만 되돌림
+    toast("저장 실패 — 되돌렸어요. 잠시 후 다시 시도");
+  }
 }
 async function addComment(){
   if(!EDIT)return; const text=$("#cmt-text").value.trim(); if(!text){toast("내용을 입력하세요");return;}
