@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24b -->
+<!-- build: auto-deploy 2026-06-24g (kpi-measure) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -350,7 +350,7 @@ function parseKPI(text){
       id:k.id, title:k.title,
       goal:f["목표/측정지표"]||"", current:f["현재값"]||"",
       weight:parseInt((f["가중치(1~5)"]||"").match(/\d/)||["3"],10),
-      memo:f["메모"]||""
+      measure:f["측정방식"]||"", memo:f["메모"]||""
     });
   });
   return out;
@@ -496,17 +496,30 @@ async function loadAll(){
 /* ───────────────────────── 렌더 ───────────────────────── */
 function kpiMapById(kpis){ const m={}; kpis.forEach(k=>m[k.id]=k); return m; }
 
+// KPI 진행률 바: 측정방식이 task면 완료티켓/전체티켓, 아니면 현재값/목표 수치
+function kpiBar(k){
+  const taskMode=/task|태스크|과제|티켓/i.test(k.measure||"");
+  if(taskMode){
+    const ts=(STATE?.tickets||[]).filter(t=>t.kpi===k.id);
+    const tot=ts.length, done=ts.filter(t=>t.status==="done").length;
+    if(!tot) return `<div class="barlabel"><span>달성률(과제 기준)</span><span>연결 티켓 없음</span></div>`;
+    const pct=done/tot*100;
+    return `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      <div class="barlabel"><span>달성률(완료 ${done}/${tot} 과제)</span><span>${pct.toFixed(0)}%</span></div>`;
+  }
+  const cur=parseKNum(k.current), goal=parseKNum(k.goal);
+  if(cur!=null && goal!=null && goal!==0){
+    const reduction=/절감|↓|낮|감소|줄/.test(k.goal+k.memo)||cur>goal;
+    const pct=reduction?Math.min(100,(goal/cur)*100):Math.min(100,(cur/goal)*100);
+    return `<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
+      <div class="barlabel"><span>${reduction?"목표 근접도":"달성률"}</span><span>${pct.toFixed(0)}%</span></div>`;
+  }
+  return "";
+}
 function renderKPIs(kpis){
   if(!kpis.length) return `<section class="card"><h2>KPI</h2><div class="empty">KPI 파일이 비어있거나 못 읽었습니다.</div></section>`;
   const cards = kpis.map(k=>{
-    const cur=parseKNum(k.current), goal=parseKNum(k.goal);
-    let bar="";
-    if(cur!=null && goal!=null && goal!==0){
-      const reduction = /절감|↓|낮|감소|줄/.test(k.goal+k.memo) || cur>goal;
-      const pct = reduction ? Math.min(100,(goal/cur)*100) : Math.min(100,(cur/goal)*100);
-      bar=`<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
-           <div class="barlabel"><span>${reduction?"목표 근접도":"달성률"}</span><span>${pct.toFixed(0)}%</span></div>`;
-    }
+    const bar=kpiBar(k);
     return `<div class="kpi" data-kpi="${esc(k.id)}">
       <div class="id">${esc(k.id)}<span class="more">상세 ›</span></div>
       <div class="title">${esc(k.title)}</div>
@@ -638,14 +651,7 @@ function formatMemo(memo){
 
 function openKpiDetail(id){
   const s=STATE; const k=s.kpis.find(x=>x.id===id); if(!k) return;
-  const cur=parseKNum(k.current), goal=parseKNum(k.goal);
-  let bar="";
-  if(cur!=null && goal!=null && goal!==0){
-    const reduction=/절감|↓|낮|감소|줄/.test(k.goal+k.memo)||cur>goal;
-    const pct=reduction?Math.min(100,(goal/cur)*100):Math.min(100,(cur/goal)*100);
-    bar=`<div class="bar"><i style="width:${pct.toFixed(0)}%"></i></div>
-      <div class="barlabel"><span>${reduction?"목표 근접도":"달성률"}</span><span>${pct.toFixed(0)}%</span></div>`;
-  }
+  const bar=kpiBar(k);
   const tickets=(s.tickets||[]).filter(t=>t.kpi===id);
   const tc=st=>tickets.filter(t=>t.status===st).length;
   const chip=st=>({todo:"해야할것",doing:"하는중",done:"완료"})[st]||st;
@@ -688,6 +694,11 @@ function openKpiEdit(id){
     <textarea id="ke-current">${esc(k.current)}</textarea>
     <label class="fld">목표/측정지표</label>
     <textarea id="ke-goal">${esc(k.goal)}</textarea>
+    <label class="fld">달성률 측정방식</label>
+    <select id="ke-measure">
+      <option value=""${/task|태스크|과제|티켓/i.test(k.measure||"")?"":" selected"}>수치 자동 (현재값 ÷ 목표)</option>
+      <option value="task"${/task|태스크|과제|티켓/i.test(k.measure||"")?" selected":""}>완료 과제 비율 (완료 ÷ 전체 티켓)</option>
+    </select>
     <label class="fld">가중치 (1~5)</label>
     <input id="ke-weight" type="number" min="1" max="5" value="${k.weight}" />
     <label class="fld">진단·레버 메모 <span class="small">([진단][레버] 태그·①②③로 적으면 상세에서 불릿 정리됨)</span></label>
@@ -702,7 +713,8 @@ function openKpiEdit(id){
 }
 async function saveKpiEdit(id){
   const fields={ title:$("#ke-title").value, current:$("#ke-current").value,
-    goal:$("#ke-goal").value, weight:$("#ke-weight").value, memo:$("#ke-memo").value };
+    goal:$("#ke-goal").value, weight:$("#ke-weight").value, memo:$("#ke-memo").value,
+    measure:$("#ke-measure").value };
   const btn=$("#ke-save"); btn.disabled=true; btn.textContent="저장 중…";
   try{ await saveKpi(id, fields); toast("✅ 저장 & 커밋됨"); await loadAll(); render(); openKpiDetail(id); }
   catch(e){ toast("저장 실패: "+(e.message||e)); btn.disabled=false; btn.textContent="저장 & 커밋"; }
@@ -728,6 +740,12 @@ async function saveKpi(id, fields){
     setField("현재값", fields.current);
     setField("가중치(1~5)", fields.weight);
     setField("메모", fields.memo);
+    // 측정방식: 기존 줄 있으면 교체, 없으면 제목 다음 줄에 삽입(빈 값이면 생략)
+    if(fields.measure!=null){
+      const mre=/(\n\s*-\s+\*\*측정방식\*\*\s*[:：]\s*)[^\n]*/;
+      if(mre.test(block)) block=block.replace(mre,(mm,p1)=>p1+sani(fields.measure));
+      else if(sani(fields.measure)) block=block.replace(/^(## [^\n]*\n)/,(mm,p1)=>p1+`- **측정방식**: ${sani(fields.measure)}\n`);
+    }
     const newText=text.slice(0,start)+block+text.slice(end);
     try{ await putFile("assistant/kpi.md", newText, `kpi: ${id} 상세 수정(대시보드)`, f.sha); return; }
     catch(e){ if(e.status===409 && attempt<2) continue; throw e; }
