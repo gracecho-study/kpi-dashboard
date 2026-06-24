@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24k (reorder+slim) -->
+<!-- build: auto-deploy 2026-06-24l (no-weekly+badgefix) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -478,7 +478,7 @@ function parseTicketLite(text, meta){
   if(m) m[1].split(/\n/).forEach(l=>{ const mm=l.match(/^(\w+):\s*(.*)$/); if(mm) fm[mm[1]]=mm[2].trim(); });
   const body = text.replace(/^---\n[\s\S]*?\n---/, "");
   const hasAnalysis = ["사실","결과","문제","목표"].some(k=>{
-    const x=body.match(new RegExp("##\\s*"+k+"\\s*\\n([\\s\\S]*?)(?=\\n##|$)"));
+    const x=body.match(new RegExp("##\\s*"+k+"[ \\t]*\\n([\\s\\S]*?)(?=\\n##\\s|$)"));
     return x && x[1].trim();
   });
   return { id:fm.id, title:fm.title||"", status:fm.status||"todo", kpi:fm.kpi||"기타",
@@ -609,16 +609,20 @@ function renderAlerts(s){
 }
 
 function isDoneStatus(st){ return /완료|✅/.test(st||""); }
-function pickFocus(s){
-  // 오늘의 MIT = 이번 주 우선순위 중 미완료 최상위, 없으면 백로그 점수 최상위 미완료
-  const w=s.weekly;
-  if(w && w.rows.length){
-    const active=w.rows.find(r=>!isDoneStatus(r.status));
-    if(active) return {title:active.title, kpi:active.kpi, ie:active.ie, due:active.due, src:"이번 주 1순위"};
-  }
+function taskPriority(s){
+  // 우선순위 = 칸반에서 정한 순서(order) 우선, 없으면 점수순. 미완료(대기·진행)만.
   const km=kpiMapById(s.kpis);
-  const cand=activeTasks(s).filter(t=>t.status!=="done").map(t=>({t,sc:scoreTask(t,km,s.cfg.w)})).sort((a,b)=>b.sc-a.sc)[0];
-  if(cand) return {title:cand.t.title, kpi:cand.t.kpi, ie:`${cand.t.impact??"—"}/${cand.t.effort??"—"}`, due:cand.t.due, src:"Task 최우선"};
+  return activeTasks(s).filter(t=>t.status==="todo"||t.status==="doing")
+    .map(t=>({...t, sc:scoreTask(t,km,s.cfg.w)}))
+    .sort((a,b)=>{ const ao=a.order,bo=b.order;
+      if(ao!=null&&bo!=null) return ao-bo;
+      if(ao!=null) return -1; if(bo!=null) return 1;
+      return b.sc-a.sc; });
+}
+function pickFocus(s){
+  // 오늘의 MIT = 우선순위 최상위 Task (칸반에서 위로 올린 것)
+  const top=taskPriority(s)[0];
+  if(top) return {title:top.title, kpi:top.kpi, ie:`${top.impact??"—"}/${top.effort??"—"}`, due:top.due, src:"우선순위 1위"};
   return null;
 }
 function renderMIT(s){
@@ -666,11 +670,11 @@ function renderToday(s){
       </div>
       ${tgt?`<div class="small" style="margin-top:4px">목표 proactive ≥ ${(tgt*100).toFixed(0)}%</div>`:""}`;
   };
-  // 할 일(계획) = 이번 주 우선순위 중 미완료 top 3 → "오늘 뭐에 집중"
-  const plan=(s.weekly?.rows||[]).filter(r=>!isDoneStatus(r.status)).slice(0,3);
+  // 할 일(계획) = 우선순위 상위 미완료 Task top 3 (칸반 순서) → "오늘 뭐에 집중"
+  const plan=taskPriority(s).slice(0,3);
   const planHtml=plan.length
-    ? `<ul class="clean">${plan.map((r,i)=>`<li>${i===0?"🐸":"⬜"} ${esc(r.title)} ${r.kpi?`<span class="kpi-pill">${esc(r.kpi)}</span>`:""} <span class="small">${esc(r.status||"")}</span></li>`).join("")}</ul>`
-    : `<div class="small">이번 주 우선순위가 없습니다 — "서머리"로 주간 계획을 만드세요.</div>`;
+    ? `<ul class="clean">${plan.map((t,i)=>`<li>${i===0?"🐸":"⬜"} ${esc(t.title)} ${t.kpi&&t.kpi!=="기타"?`<span class="kpi-pill">${esc(t.kpi)}</span>`:""} <span class="small">${st2state(t.status)}</span></li>`).join("")}</ul>`
+    : `<div class="small">대기·진행 Task가 없습니다 — Task 관리에서 추가하세요.</div>`;
   // 한 일(기록) = 오늘 일일 로그
   let logHtml;
   if(!t || (!t.done.length && !t.doing.length && !t.blockers.length)){
@@ -905,7 +909,7 @@ function render(){
   const s=STATE;
   $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
   $("#main").innerHTML =
-    renderAlerts(s) + renderKPIs(s.kpis) + renderMIT(s) + renderWeekly(s) + renderToday(s) + renderBacklog(s);
+    renderAlerts(s) + renderMIT(s) + renderKPIs(s.kpis) + renderToday(s) + renderBacklog(s);
   // 공유 모달의 KPI 옵션 채우기
   const sel=$("#s-kpi");
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");

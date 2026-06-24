@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24k (reorder+slim) -->
+<!-- build: auto-deploy 2026-06-24l (no-weekly+badgefix) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -282,7 +282,7 @@ function serialize(t){
 function parseTicket(text,meta){
   const m=text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/); const fm={}; let body=text;
   if(m){m[1].split(/\n/).forEach(l=>{const mm=l.match(/^(\w+):\s*(.*)$/);if(mm)fm[mm[1]]=mm[2].trim();});body=m[2];}
-  const sec=name=>{const x=body.match(new RegExp(`##\\s*${name}\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)`));return x?x[1].trim():"";};
+  const sec=name=>{const x=body.match(new RegExp(`##\\s*${name}[ \\t]*\\n([\\s\\S]*?)(?=\\n##\\s|$)`));return x?x[1].trim():"";};
   const craw=sec("코멘트");
   const comments=craw?craw.split(/\n/).map(s=>s.trim()).filter(s=>s.startsWith("-")):[];
   return {id:fm.id,title:fm.title||"",status:fm.status||"todo",kpi:fm.kpi||"기타",
@@ -343,8 +343,8 @@ function cardHTML(t,idx,len){
   const down=idx<len-1?`<button class="sm" data-reorder="${t.id}|down" title="우선순위 ↓">▼</button>`:`<button class="sm" disabled>·</button>`;
   return `<div class="card" draggable="true" data-id="${t.id}" data-status="${t.status}" data-open="${t.id}">
     <div class="t"><span class="drag" title="드래그로 순서 변경">⠿</span> ${esc(t.title||t.goal||"(제목 없음)")}</div>
-    <div class="meta">${kpiPill(t.kpi)}${t.owner?`<span class="reqr">${t.owner==="본인"?"🙋":"👤"} ${esc(t.owner)}</span>`:""}${(t.impact||t.effort)?`<span class="reqr">임팩트${t.impact??"—"}/노력${t.effort??"—"}</span>`:""}
-      ${(t.fact||t.problem||t.goal)?`<span class="cmt-badge">📋 분석</span>`:""}${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+    <div class="meta">${kpiPill(t.kpi)}${t.owner?`<span class="reqr">${t.owner==="본인"?"🙋":"👤"} ${esc(t.owner)}</span>`:""}
+      ${(t.fact||t.result||t.problem||t.goal)?`<span class="cmt-badge">📋 분석</span>`:""}${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
     <div class="move">${up}${down}<span style="flex:0 0 8px"></span>${left}${right}</div>
   </div>`;
 }
