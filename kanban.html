@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24m (task-label) -->
+<!-- build: auto-deploy 2026-06-24o (reorder-1write) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -490,35 +490,42 @@ async function moveTicket(id,status){
     toast("저장 실패 — 되돌렸어요. 잠시 후 다시 시도");
   }
 }
-async function persistOrder(status, idsInOrder){
-  // 새 순서대로 order=100,200,… 부여하고 바뀐 카드만 저장 (낙관적 UI)
-  const changed=[];
-  idsInOrder.forEach((id,idx)=>{
-    const t=TICKETS.find(x=>x.id===id); const want=(idx+1)*100;
-    if(t && t.order!==want){ t.order=want; changed.push(t); }
-  });
+function effOrder(t,fallbackIdx){ return (t&&t.order!=null)?t.order:(fallbackIdx+1)*1000; }
+async function setOrder(id,newOrder){
+  const t=TICKETS.find(x=>x.id===id); if(!t) return;
+  t.order=newOrder;          // 1) 낙관적 UI: 화면 먼저
   render();
-  for(const t of changed){
-    try{ const p=await mutateTicket(t.path, x=>{ x.order=t.order; }, `ticket: ${t.id} 우선순위`);
-      const i=TICKETS.findIndex(x=>x.id===t.id); if(i>=0) TICKETS[i]=p;
-    }catch(e){ toast("순서 저장 일부 실패 — 새로고침 해주세요"); }
-  }
+  try{ const p=await mutateTicket(t.path, x=>{ x.order=newOrder; }, `ticket: ${t.id} 우선순위`);
+    const i=TICKETS.findIndex(x=>x.id===id); if(i>=0) TICKETS[i]=p;   // 최신 sha 반영
+  }catch(e){ toast("순서 저장 실패 — 잠시 후 다시"); }
+}
+// 카드 1개만 저장: 목표 위치의 위/아래 카드 order의 중간값을 부여
+function reorderTo(id,status,targetIndex){
+  const list=columnList(status).filter(x=>x.id!==id);
+  const above=list[targetIndex-1], below=list[targetIndex];
+  const A=above?effOrder(above,list.indexOf(above)):null;
+  const B=below?effOrder(below,list.indexOf(below)):null;
+  let val;
+  if(A==null&&B==null) val=1000;
+  else if(A==null) val=B-100;        // 맨 위로
+  else if(B==null) val=A+100;        // 맨 아래로
+  else val=(A+B)/2;                  // 두 카드 사이
+  setOrder(id,val);
 }
 function moveCard(id,dir){
   const t=TICKETS.find(x=>x.id===id); if(!t) return;
-  const ids=columnList(t.status).map(x=>x.id);
-  const i=ids.indexOf(id), j=i+(dir==="up"?-1:1);
-  if(j<0||j>=ids.length) return;
-  [ids[i],ids[j]]=[ids[j],ids[i]];
-  persistOrder(t.status, ids);
+  const full=columnList(t.status);
+  const i=full.findIndex(x=>x.id===id);
+  const j=i+(dir==="up"?-1:1);
+  if(j<0||j>=full.length) return;
+  reorderTo(id,t.status,j);
 }
 function dropReorder(dragId,targetId){
   const dt=TICKETS.find(x=>x.id===dragId), tt=TICKETS.find(x=>x.id===targetId);
-  if(!dt||!tt||dt.status!==tt.status) return;   // 같은 레인 안에서만 재정렬
-  const ids=columnList(dt.status).map(x=>x.id).filter(id=>id!==dragId);
-  const ti=ids.indexOf(targetId); if(ti<0) return;
-  ids.splice(ti,0,dragId);
-  persistOrder(dt.status, ids);
+  if(!dt||!tt||dt.status!==tt.status) return;   // 같은 레인 안에서만
+  const list=columnList(dt.status).filter(x=>x.id!==dragId);
+  const ti=list.findIndex(x=>x.id===targetId); if(ti<0) return;
+  reorderTo(dragId,dt.status,ti);               // 대상 카드 바로 위로
 }
 async function addComment(){
   if(!EDIT)return; const text=$("#cmt-text").value.trim(); if(!text){toast("내용을 입력하세요");return;}
