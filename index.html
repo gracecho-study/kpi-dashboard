@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24n (quick-metrics) -->
+<!-- build: auto-deploy 2026-06-24p (meetings) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -143,6 +143,13 @@
   .mit-t{font-size:16px; font-weight:700; line-height:1.45}
   .mit-meta{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px}
   .blk-h{font-size:11px; color:var(--muted); margin:2px 0 6px; font-weight:600}
+  .mtg-cols{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:560px){.mtg-cols{grid-template-columns:1fr}}
+  .mt{display:inline-block; min-width:46px; font-weight:700; color:var(--accent); font-variant-numeric:tabular-nums}
+  .prep{font-size:12px; color:#b45309; background:rgba(251,191,36,.14); border-radius:6px; padding:3px 8px; margin-top:4px; display:inline-block}
+  .prep-al{background:rgba(251,191,36,.13); border:1px solid var(--warn); border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:14px; color:#fde68a}
+  .prep-al ul{margin:6px 0 0; padding-left:2px; list-style:none}
+  .prep-al li{padding:3px 0}
 </style>
 </head>
 <body>
@@ -502,10 +509,11 @@ function scoreTask(t, kpiMap, w){
 
 /* ───────────────────────── 데이터 로드 ───────────────────────── */
 async function loadAll(){
-  const [kpiF, cfgF, backF, dailyList, weeklyList] = await Promise.all([
+  const [kpiF, cfgF, backF, schF, dailyList, weeklyList] = await Promise.all([
     getFile("assistant/kpi.md"),
     getFile("assistant/config.md"),
     getFile("assistant/backlog.md"),
+    getFile("assistant/schedule.md"),
     listDir("assistant/daily"),
     listDir("assistant/weekly")
   ]);
@@ -513,6 +521,7 @@ async function loadAll(){
   const kpis = parseKPI(kpiF?.text);
   const cfg  = parseConfig(cfgF?.text);
   const backlog = parseBacklog(backF?.text);
+  const schedule = parseSchedule(schF?.text);
 
   // 이번 주 weekly 파일(없으면 최신)
   const wk = isoWeek();
@@ -542,7 +551,7 @@ async function loadAll(){
     const f=await getFile(e.path); return parseTicketLite(f?.text, {sha:f?.sha, path:e.path});
   }))).filter(Boolean);
 
-  STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed, tickets,
+  STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed, tickets, schedule,
             ratio:{p:pSum,r:rSum,has:hasHours}, hasKpiFile:!!kpiF };
   return STATE;
 }
@@ -624,6 +633,49 @@ function pickFocus(s){
   const top=taskPriority(s)[0];
   if(top) return {title:top.title, kpi:top.kpi, ie:`${top.impact??"—"}/${top.effort??"—"}`, due:top.due, src:"우선순위 1위"};
   return null;
+}
+/* ───────────────────────── 미팅 일정 ───────────────────────── */
+function parseSchedule(text){
+  if(!text) return {recurring:[], oneoff:[]};
+  const grab=(name)=>{ const a=text.split(new RegExp("##\\s*"+name)); return a[1]?a[1].split(/\n##/)[0]:""; };
+  const fld=(parts,key)=>{ const p=parts.find(x=>x.startsWith(key)); return p?p.slice(key.length).replace(/^\s*:?\s*/,"").trim():""; };
+  const rec=[], one=[];
+  grab("정기").split(/\n/).forEach(l=>{
+    const m=l.match(/^\s*-\s*([월화수목금토일])\s+(\d{1,2}:\d{2})\s*\|(.*)$/); if(!m) return;
+    const parts=m[3].split("|").map(x=>x.trim());
+    rec.push({dow:m[1], time:m[2], title:parts[0]||"", place:parts[1]||"", prep:fld(parts,"준비"), by:fld(parts,"by")});
+  });
+  grab("단발").split(/\n/).forEach(l=>{
+    const m=l.match(/^\s*-\s*(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*\|(.*)$/); if(!m) return;
+    const parts=m[3].split("|").map(x=>x.trim());
+    one.push({date:m[1], time:m[2], title:parts[0]||"", place:parts[1]||"", prep:fld(parts,"준비")});
+  });
+  return {recurring:rec, oneoff:one};
+}
+function localISO(d){ return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
+function meetingsOn(sch, d){
+  if(!sch) return [];
+  const dow="일월화수목금토"[d.getDay()], iso=localISO(d);
+  const list=[];
+  sch.recurring.forEach(m=>{ if(m.dow===dow) list.push(m); });
+  sch.oneoff.forEach(m=>{ if(m.date===iso) list.push(m); });
+  return list.sort((a,b)=> a.time<b.time?-1:1);
+}
+function needsPrep(m){ return !!m.prep && m.prep.trim()!=="" && !/^\s*(없음|없슴|-|해당\s*없음)/.test(m.prep); }
+function renderMeetings(s){
+  const sch=s.schedule; if(!sch || (!sch.recurring.length && !sch.oneoff.length)) return "";
+  const now=new Date(), tmr=new Date(now.getTime()+864e5);
+  const today=meetingsOn(sch, now), tomorrow=meetingsOn(sch, tmr);
+  if(!today.length && !tomorrow.length) return "";
+  const mrow=m=>`<li><span class="mt">${esc(m.time)}</span> ${esc(m.title)}${m.place?` <span class="small">· ${esc(m.place)}</span>`:""}${needsPrep(m)?`<div class="prep">🔔 준비: ${esc(m.prep)}</div>`:""}</li>`;
+  const tprep=tomorrow.filter(needsPrep);
+  let html="";
+  if(tprep.length) html+=`<div class="prep-al"><b>🔔 내일 미리 준비할 것</b><ul class="clean">${tprep.map(m=>`<li><span class="mt">${esc(m.time)}</span> ${esc(m.title)} — <b>${esc(m.prep)}</b></li>`).join("")}</ul></div>`;
+  html+=`<div class="mtg-cols">
+    <div><div class="blk-h">오늘 (${weekdayKo()})</div>${today.length?`<ul class="clean">${today.map(mrow).join("")}</ul>`:`<div class="small">미팅 없음</div>`}</div>
+    <div><div class="blk-h">내일</div>${tomorrow.length?`<ul class="clean">${tomorrow.map(mrow).join("")}</ul>`:`<div class="small">미팅 없음</div>`}</div>
+  </div>`;
+  return `<section class="card"><h2>📅 미팅</h2>${html}</section>`;
 }
 function renderMIT(s){
   const f=pickFocus(s); if(!f) return "";
@@ -962,7 +1014,7 @@ function render(){
   const s=STATE;
   $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
   $("#main").innerHTML =
-    renderAlerts(s) + renderMIT(s) + renderKPIs(s.kpis) + renderToday(s) + renderBacklog(s);
+    renderAlerts(s) + renderMeetings(s) + renderMIT(s) + renderKPIs(s.kpis) + renderToday(s) + renderBacklog(s);
   // 공유 모달의 KPI 옵션 채우기
   const sel=$("#s-kpi");
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
