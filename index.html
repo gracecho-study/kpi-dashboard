@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-07-04 (next-week) -->
+<!-- build: auto-deploy 2026-07-04b (next-week 2col) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -692,11 +692,13 @@ function renderMeetings(s){
   let html="";
   if(prepItems.length) html+=`<div class="prep-al"><b>🔔 미리 준비할 것</b><ul class="clean">${
     prepItems.map(x=>`<li><b>${x.when}</b> <span class="mt">${esc(x.m.time)}</span> ${esc(x.m.title)} — <b>${esc(x.m.prep)}</b></li>`).join("")}</ul></div>`;
-  // 이번 주 / 다음 주 그리드
+  // 이번 주 / 다음 주 — 좌우 2분할
   const ws=weekStartMon(now);
   const nextWs=new Date(ws.getTime()+7*864e5);
-  html+=`<div class="wk-label">이번 주</div>`+weekGrid(sch, ws, todayIso);
-  html+=`<div class="wk-label" style="margin-top:12px">다음 주</div>`+weekGrid(sch, nextWs, todayIso);
+  html+=`<div class="mtg-cols">`
+    +`<div><div class="wk-label">이번 주</div>${weekGrid(sch, ws, todayIso)}</div>`
+    +`<div><div class="wk-label">다음 주</div>${weekGrid(sch, nextWs, todayIso)}</div>`
+    +`</div>`;
   return `<section class="card"><h2>📅 미팅 일정 <button class="addbtn" id="mtg-tmpl">📋 회의록 양식</button></h2>${html}</section>`;
 }
 function weekGrid(sch, ws, todayIso){
