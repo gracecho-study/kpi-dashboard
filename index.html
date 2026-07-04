@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-07-04e (republish) -->
+<!-- build: auto-deploy 2026-07-04f (docs-shelf) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -86,6 +86,11 @@
   .retro-h{color:var(--muted); font-size:14px}
   .retro-list{margin:6px 0 0; padding-left:22px; color:var(--muted); font-size:13px; line-height:1.7}
   .retro-list li{padding:1px 0}
+  .doc-row{display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line)}
+  .doc-row:last-child{border-bottom:0}
+  .doc-nm{flex:1; font-size:13px; min-width:0; word-break:break-all}
+  .doc-act{display:flex; gap:6px; flex:0 0 auto}
+  .doc-act .addbtn{font-size:12px; padding:4px 9px}
   .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
   label.fld{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px}
   input,select,textarea{
@@ -533,13 +538,14 @@ function scoreTask(t, kpiMap, w){
 
 /* ───────────────────────── 데이터 로드 ───────────────────────── */
 async function loadAll(){
-  const [kpiF, cfgF, backF, schF, dailyList, weeklyList] = await Promise.all([
+  const [kpiF, cfgF, backF, schF, dailyList, weeklyList, docsList] = await Promise.all([
     getFile("assistant/kpi.md"),
     getFile("assistant/config.md"),
     getFile("assistant/backlog.md"),
     getFile("assistant/schedule.md"),
     listDir("assistant/daily"),
-    listDir("assistant/weekly")
+    listDir("assistant/weekly"),
+    listDir("assistant/docs")
   ]);
 
   const kpis = parseKPI(kpiF?.text);
@@ -575,7 +581,7 @@ async function loadAll(){
     const f=await getFile(e.path); return parseTicketLite(f?.text, {sha:f?.sha, path:e.path});
   }))).filter(Boolean);
 
-  STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed, tickets, schedule,
+  STATE = { kpis, cfg, backlog, weekly, weeklyName, today, todayUsed, tickets, schedule, docs:docsList,
             ratio:{p:pSum,r:rSum,has:hasHours}, hasKpiFile:!!kpiF };
   return STATE;
 }
@@ -642,6 +648,30 @@ function renderRetro(s){
   if(!acts.length) return "";
   const items=acts.map(act=>`<li>${esc(act)}</li>`).join("");
   return `<section class="card retro"><h2 class="retro-h">🎯 회고 액션 <span class="small">· 다음 2주 상기</span></h2><ol class="retro-list">${items}</ol></section>`;
+}
+// 문서함 — assistant/docs 산출물 목록(어디서나 열기·다운로드). 비공개(토큰으로만 로드).
+function renderDocs(s){
+  const docs=(s.docs||[]).filter(f=>f.type==="file" && !/^\./.test(f.name)).sort((a,b)=>a.name<b.name?1:-1);
+  if(!docs.length) return "";
+  const rows=docs.map(f=>{
+    const html=/\.html?$/i.test(f.name);
+    const p=encodeURIComponent(f.path), n=encodeURIComponent(f.name);
+    return `<div class="doc-row"><span class="doc-nm">${html?"🌐":"📄"} ${esc(f.name)}</span>
+      <span class="doc-act">${html?`<button class="addbtn" data-docopen="${p}" data-docname="${n}">열기</button>`:""}<button class="addbtn" data-docdl="${p}" data-docname="${n}">⬇ 저장</button></span></div>`;
+  }).join("");
+  return `<section class="card"><h2>📄 문서함 <span class="small">· 분석·전략 산출물 (${docs.length})</span></h2>${rows}</section>`;
+}
+async function openDoc(path,name){
+  try{ const f=await getFile(path); if(!f){toast("파일 없음");return;}
+    const blob=new Blob([f.text],{type:/\.html?$/i.test(name)?"text/html;charset=utf-8":"text/plain;charset=utf-8"});
+    const url=URL.createObjectURL(blob); window.open(url,"_blank"); setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){ toast("열기 실패: "+(e.message||e)); }
+}
+async function downloadDoc(path,name){
+  try{ const f=await getFile(path); if(!f){toast("파일 없음");return;}
+    const blob=new Blob([f.text],{type:"application/octet-stream"});
+    const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),60000);
+  }catch(e){ toast("다운로드 실패: "+(e.message||e)); }
 }
 
 function isDoneStatus(st){ return /완료|✅/.test(st||""); }
@@ -1096,7 +1126,7 @@ function render(){
   const s=STATE;
   $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
   $("#main").innerHTML =
-    renderWarnings(s) + renderMIT(s) + renderMeetings(s) + renderKPIs(s.kpis) + renderBacklog(s) + renderToday(s) + renderRetro(s);
+    renderWarnings(s) + renderMIT(s) + renderMeetings(s) + renderKPIs(s.kpis) + renderBacklog(s) + renderToday(s) + renderDocs(s) + renderRetro(s);
   // 공유 모달의 KPI 옵션 채우기
   const sel=$("#s-kpi");
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
@@ -1107,6 +1137,9 @@ function render(){
   // Task 관리: 추가 / 행 클릭 편집
   const addBtn=$("#task-add"); if(addBtn) addBtn.onclick=(e)=>{ e.stopPropagation(); openTaskEdit(null); };
   $$("#main .task-row").forEach(el=>el.onclick=()=>openTaskEdit(el.dataset.tid));
+  // 문서함: 열기 / 다운로드
+  $$("#main [data-docopen]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); openDoc(decodeURIComponent(el.dataset.docopen), decodeURIComponent(el.dataset.docname)); });
+  $$("#main [data-docdl]").forEach(el=>el.onclick=(e)=>{ e.stopPropagation(); downloadDoc(decodeURIComponent(el.dataset.docdl), decodeURIComponent(el.dataset.docname)); });
 }
 
 /* ───────────────────────── 공유(쓰기) ───────────────────────── */
