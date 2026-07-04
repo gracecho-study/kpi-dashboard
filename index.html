@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-07-04c (next-week 2col · rebuild) -->
+<!-- build: auto-deploy 2026-07-04d (layout reorder) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -79,6 +79,13 @@
   .alert.warn{background:rgba(251,191,36,.08); border-color:var(--warn); color:#fde68a}
   .alert.bad{background:rgba(248,113,113,.08); border-color:var(--bad); color:#fca5a5}
   .alert.good{background:rgba(52,211,153,.08); border-color:var(--good); color:#a7f3d0}
+  .warns{margin-bottom:16px}
+  .warns .alert{margin-bottom:8px}
+  .warns .alert:last-child{margin-bottom:0}
+  .retro{opacity:.9}
+  .retro-h{color:var(--muted); font-size:14px}
+  .retro-list{margin:6px 0 0; padding-left:22px; color:var(--muted); font-size:13px; line-height:1.7}
+  .retro-list li{padding:1px 0}
   .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
   label.fld{display:block; font-size:12px; color:var(--muted); margin:10px 0 4px}
   input,select,textarea{
@@ -615,23 +622,26 @@ function renderKPIs(kpis){
   return `<section class="card"><h2>KPI 진척 <button class="addbtn" id="kpi-metrics">📊 오늘 수치</button></h2><div class="kpi-grid">${cards}</div></section>`;
 }
 
-function renderAlerts(s){
+// 경고만 (떠야 할 때만) — 얇은 띠로 최상단. 없으면 아무것도 안 뜸.
+function renderWarnings(s){
   const a=[];
-  // 회고 임박
   const dd=daysUntil(s.cfg.next_retro_due);
   if(dd!=null && dd<=2) a.push(`<div class="alert ${dd<0?"bad":"warn"}">📝 회고 ${dd<0?`${-dd}일 지남`:dd===0?"오늘":`D-${dd}`} (${s.cfg.next_retro_due}). "회고"라고 말해 진행하세요.</div>`);
-  // WIP 초과
   const doing = s.today?.doing?.length || (s.weekly?.rows||[]).filter(r=>/진행/.test(r.status)).length;
   if(s.cfg.weekly_wip_limit && doing>s.cfg.weekly_wip_limit)
     a.push(`<div class="alert warn">⚠️ 진행중 업무 ${doing}개 — WIP 한도(${s.cfg.weekly_wip_limit}) 초과.</div>`);
-  // proactive 비중
   if(s.ratio.has){
     const tot=s.ratio.p+s.ratio.r, pr=tot?s.ratio.p/tot:0, tgt=s.cfg.target_proactive_ratio;
     if(tgt && pr<tgt) a.push(`<div class="alert bad">🔻 proactive 비중 ${(pr*100).toFixed(0)}% &lt; 목표 ${(tgt*100).toFixed(0)}%. f/up에 매몰되는 중 — 내 임팩트 업무 시간을 확보하세요.</div>`);
   }
-  // 회고 액션 상기
-  (s.cfg.retroActions||[]).forEach(act=>a.push(`<div class="alert good">🎯 회고 액션: ${esc(act)}</div>`));
-  return a.length?`<section class="card"><h2>알림</h2>${a.join("")}</section>`:"";
+  return a.length?`<div class="warns">${a.join("")}</div>`:"";
+}
+// 회고 액션 상기 — 한 카드에 번호 불릿으로 압축. 맨 아래.
+function renderRetro(s){
+  const acts=s.cfg.retroActions||[];
+  if(!acts.length) return "";
+  const items=acts.map(act=>`<li>${esc(act)}</li>`).join("");
+  return `<section class="card retro"><h2 class="retro-h">🎯 회고 액션 <span class="small">· 다음 2주 상기</span></h2><ol class="retro-list">${items}</ol></section>`;
 }
 
 function isDoneStatus(st){ return /완료|✅/.test(st||""); }
@@ -1086,7 +1096,7 @@ function render(){
   const s=STATE;
   $("#ctx-sub").textContent = `${getCfg().owner}/${getCfg().repo} · ${todayISO()}(${weekdayKo()})`;
   $("#main").innerHTML =
-    renderAlerts(s) + renderMeetings(s) + renderMIT(s) + renderKPIs(s.kpis) + renderToday(s) + renderBacklog(s);
+    renderWarnings(s) + renderMIT(s) + renderMeetings(s) + renderKPIs(s.kpis) + renderBacklog(s) + renderToday(s) + renderRetro(s);
   // 공유 모달의 KPI 옵션 채우기
   const sel=$("#s-kpi");
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
