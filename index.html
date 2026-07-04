@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24p (meetings) -->
+<!-- build: auto-deploy 2026-06-24q (week-meetings) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -150,6 +150,14 @@
   .prep-al{background:rgba(251,191,36,.13); border:1px solid var(--warn); border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:14px; color:#fde68a}
   .prep-al ul{margin:6px 0 0; padding-left:2px; list-style:none}
   .prep-al li{padding:3px 0}
+  .wk-row{display:flex; gap:12px; padding:8px 8px; border-bottom:1px solid var(--line); border-radius:8px}
+  .wk-row:last-child{border-bottom:0}
+  .wk-row.today{background:rgba(56,189,248,.09)}
+  .wk-d{flex:0 0 62px; font-weight:700; color:var(--muted); font-size:13px}
+  .wk-row.today .wk-d{color:var(--accent)}
+  .wk-m{display:flex; flex-direction:column; gap:4px; min-width:0}
+  .mtg-item{font-size:13.5px; line-height:1.45}
+  .mtg-item.pp{color:#fbbf24; font-weight:600}
 </style>
 </head>
 <body>
@@ -662,20 +670,33 @@ function meetingsOn(sch, d){
   return list.sort((a,b)=> a.time<b.time?-1:1);
 }
 function needsPrep(m){ return !!m.prep && m.prep.trim()!=="" && !/^\s*(없음|없슴|-|해당\s*없음)/.test(m.prep); }
+function weekStartMon(d){ const x=new Date(d); const off=(x.getDay()+6)%7; x.setDate(x.getDate()-off); x.setHours(0,0,0,0); return x; }
 function renderMeetings(s){
   const sch=s.schedule; if(!sch || (!sch.recurring.length && !sch.oneoff.length)) return "";
   const now=new Date(), tmr=new Date(now.getTime()+864e5);
-  const today=meetingsOn(sch, now), tomorrow=meetingsOn(sch, tmr);
-  if(!today.length && !tomorrow.length) return "";
-  const mrow=m=>`<li><span class="mt">${esc(m.time)}</span> ${esc(m.title)}${m.place?` <span class="small">· ${esc(m.place)}</span>`:""}${needsPrep(m)?`<div class="prep">🔔 준비: ${esc(m.prep)}</div>`:""}</li>`;
-  const tprep=tomorrow.filter(needsPrep);
+  const todayIso=localISO(now);
+  // 준비 알림 (오늘/내일 준비 필요분)
+  const prepItems=[
+    ...meetingsOn(sch,now).filter(needsPrep).map(m=>({when:"오늘",m})),
+    ...meetingsOn(sch,tmr).filter(needsPrep).map(m=>({when:"내일",m})),
+  ];
   let html="";
-  if(tprep.length) html+=`<div class="prep-al"><b>🔔 내일 미리 준비할 것</b><ul class="clean">${tprep.map(m=>`<li><span class="mt">${esc(m.time)}</span> ${esc(m.title)} — <b>${esc(m.prep)}</b></li>`).join("")}</ul></div>`;
-  html+=`<div class="mtg-cols">
-    <div><div class="blk-h">오늘 (${weekdayKo()})</div>${today.length?`<ul class="clean">${today.map(mrow).join("")}</ul>`:`<div class="small">미팅 없음</div>`}</div>
-    <div><div class="blk-h">내일</div>${tomorrow.length?`<ul class="clean">${tomorrow.map(mrow).join("")}</ul>`:`<div class="small">미팅 없음</div>`}</div>
-  </div>`;
-  return `<section class="card"><h2>📅 미팅</h2>${html}</section>`;
+  if(prepItems.length) html+=`<div class="prep-al"><b>🔔 미리 준비할 것</b><ul class="clean">${
+    prepItems.map(x=>`<li><b>${x.when}</b> <span class="mt">${esc(x.m.time)}</span> ${esc(x.m.title)} — <b>${esc(x.m.prep)}</b></li>`).join("")}</ul></div>`;
+  // 이번 주(월~일) 전체
+  const ws=weekStartMon(now), dowKo="월화수목금토일";
+  let rows="";
+  for(let i=0;i<7;i++){
+    const d=new Date(ws.getTime()+i*864e5), iso=localISO(d), ms=meetingsOn(sch,d);
+    if(!ms.length && i>=5) continue;  // 주말은 미팅 있을 때만
+    const isToday=iso===todayIso;
+    const items=ms.length
+      ? ms.map(m=>`<span class="mtg-item${needsPrep(m)?" pp":""}">${esc(m.time)} ${esc(m.title)}${m.place?` <span class="small">· ${esc(m.place)}</span>`:""}${needsPrep(m)?" 🔔":""}</span>`).join("")
+      : `<span class="small">—</span>`;
+    rows+=`<div class="wk-row${isToday?" today":""}"><div class="wk-d">${dowKo[i]}<span class="small"> ${d.getMonth()+1}/${d.getDate()}</span></div><div class="wk-m">${items}</div></div>`;
+  }
+  html+=`<div class="wk">${rows}</div>`;
+  return `<section class="card"><h2>📅 이번 주 미팅</h2>${html}</section>`;
 }
 function renderMIT(s){
   const f=pickFocus(s); if(!f) return "";
