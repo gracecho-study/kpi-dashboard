@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>개인 칸반보드 · KPI 비서</title>
-<!-- build: auto-deploy 2026-06-24o (reorder-1write) -->
+<!-- build: auto-deploy 2026-07-04 (kpi-swimlane) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -71,6 +71,14 @@
   .status-chip.todo{background:rgba(100,116,139,.2); color:#cbd5e1}
   .status-chip.doing{background:rgba(56,189,248,.18); color:var(--doing)}
   .status-chip.done{background:rgba(52,211,153,.18); color:var(--done)}
+  /* KPI 스윔레인 (KPI별 × 상태 3열) */
+  .kcols{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  .kcol{background:transparent; border:1px solid var(--line); border-radius:11px; padding:9px; min-width:0}
+  .kch{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; margin:0 2px 9px; font-weight:600}
+  .kcol.todo .dot{background:var(--todo)} .kcol.doing .dot{background:var(--doing)} .kcol.done .dot{background:var(--done)}
+  .kcol .card{margin-bottom:8px}
+  .kcol .empty{padding:6px 4px}
+  @media(max-width:720px){.kcols{grid-template-columns:1fr}}
   /* modal */
   .modal-bg{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-start; justify-content:center; padding:20px 12px; z-index:50; overflow:auto}
   .modal-bg.open{display:flex}
@@ -366,17 +374,29 @@ function renderKPI(){
     const done=list.filter(t=>t.status==="done").length, doing=list.filter(t=>t.status==="doing").length;
     const k=KPIS.find(k=>k.id===g);
     const dp=list.length?done/list.length*100:0, gp=list.length?doing/list.length*100:0;
+    const cols=STATUSES.map(([key,label])=>{
+      const cl=list.filter(t=>t.status===key).sort(byOrder);
+      return `<div class="kcol ${key}"><div class="kch"><span class="dot"></span>${label}<span class="count">${cl.length}</span></div>
+        ${cl.length?cl.map(swimCard).join(""):`<div class="empty">—</div>`}</div>`;
+    }).join("");
     return `<div class="kgroup">
       <h3>${esc(g)} ${k?`<span class="hint">${esc(k.title)}</span>`:""}</h3>
       <div class="gsub">총 ${list.length} · 완료 ${done} · 진행 ${doing} · 대기 ${list.length-done-doing}</div>
       <div class="kbar"><div class="d" style="width:${dp}%"></div><div class="g" style="width:${gp}%"></div></div>
-      <div class="klist">${list.map(t=>`<div class="card" data-open="${t.id}">
-        <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
-        <div class="meta"><span class="status-chip ${t.status}">${({todo:"해야 할 것",doing:"하는 중",done:"완료"})[t.status]}</span>
-          ${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
-      </div>`).join("")}</div>
+      <div class="kcols">${cols}</div>
     </div>`;
   }).join("");
+}
+// KPI 스윔레인용 카드 (상태 이동 ◀▶ · 클릭 열기. 우선순위 ▲▼·드래그는 상태별 보드에서)
+function swimCard(t){
+  const order=["todo","doing","done"]; const i=order.indexOf(t.status);
+  const left=i>0?`<button class="sm" data-move="${t.id}|${order[i-1]}" title="이전 단계로">◀</button>`:`<button class="sm" disabled>·</button>`;
+  const right=i<2?`<button class="sm" data-move="${t.id}|${order[i+1]}" title="다음 단계로">▶</button>`:`<button class="sm" disabled>·</button>`;
+  return `<div class="card" data-open="${t.id}">
+    <div class="t">${esc(t.title||t.goal||"(제목 없음)")}</div>
+    <div class="meta">${t.owner?`<span class="reqr">${t.owner==="본인"?"🙋":"👤"} ${esc(t.owner)}</span>`:""}${(t.fact||t.result||t.problem||t.goal)?`<span class="cmt-badge">📋</span>`:""}${t.comments.length?`<span class="cmt-badge">💬 ${t.comments.length}</span>`:""}</div>
+    <div class="move">${left}${right}</div>
+  </div>`;
 }
 function renderArchive(){
   if(!ARCHIVED.length)return `<div class="empty">보관된 Task이 없습니다. (완료 Task은 회고 때 아카이빙됩니다)</div>`;
