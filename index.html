@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <title>KPI 비서 대시보드</title>
-<!-- build: auto-deploy 2026-06-24q (week-meetings) -->
+<!-- build: auto-deploy 2026-06-24r (mtg-template) -->
 <style>
   :root{
     --bg:#0f172a; --panel:#1e293b; --panel2:#273449; --line:#334155;
@@ -158,6 +158,14 @@
   .wk-m{display:flex; flex-direction:column; gap:4px; min-width:0}
   .mtg-item{font-size:13.5px; line-height:1.45}
   .mtg-item.pp{color:#fbbf24; font-weight:600}
+  .tmpl{background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px; font-size:13.5px; line-height:1.6; max-height:62vh; overflow:auto}
+  .tmpl p{margin:0 0 4px}
+  .tmpl .tl{font-weight:700; color:var(--accent); margin:13px 0 2px}
+  .tmpl .gr{background:var(--panel2); border-radius:8px; padding:9px 13px; margin:9px 0}
+  .tmpl .gr ol{margin:5px 0 0; padding-left:18px}
+  .tmpl .ex{color:var(--muted); font-size:12.5px; margin:4px 0 0}
+  .tmpl ul{margin:2px 0 0; padding-left:18px}
+  .tmpl ul li{margin:2px 0}
 </style>
 </head>
 <body>
@@ -696,7 +704,41 @@ function renderMeetings(s){
     rows+=`<div class="wk-row${isToday?" today":""}"><div class="wk-d">${dowKo[i]}<span class="small"> ${d.getMonth()+1}/${d.getDate()}</span></div><div class="wk-m">${items}</div></div>`;
   }
   html+=`<div class="wk">${rows}</div>`;
-  return `<section class="card"><h2>📅 이번 주 미팅</h2>${html}</section>`;
+  return `<section class="card"><h2>📅 이번 주 미팅 <button class="addbtn" id="mtg-tmpl">📋 회의록 양식</button></h2>${html}</section>`;
+}
+function openMeetingTemplate(){
+  $("#kpi-modal-inner").innerHTML=`
+    <h3 style="margin:0 0 4px; font-size:15px">📋 정기미팅 회의록 양식</h3>
+    <div class="small" style="margin-bottom:10px">복사가 안 되면 이 화면을 보고 그대로 옮겨 적으세요. (프로젝트·날짜만 바꿔서)</div>
+    <div class="tmpl">
+      <p class="tl"># [프로젝트] 정기미팅 회의록 — YYYY-MM-DD(요일) #N</p>
+      <p>참석: 기획(grace·퍼실) · 디자인 · 개발</p>
+      <div class="gr"><b>그라운드 룰</b>
+        <ol>
+          <li>안건은 <b>사전 등록 + 자료 링크</b> (회의 중 말로만 설명 X)</li>
+          <li>안건은 <b>'문제' 형태</b>로 (솔루션 지시 X)</li>
+          <li>시작 5분 = 상태 공유</li>
+          <li>종료 5분 전 = 랩업 (결정·액션 소리내어 확인)</li>
+          <li>24시간 내 전파</li>
+        </ol>
+      </div>
+      <p class="tl">0. 현황 (5분)</p>
+      <ul><li>KPI: 목표 / 현재 / 달성률</li><li>진행중 Task (오너 · 마감)</li><li>지난주 성과·실험 한 줄</li></ul>
+      <p class="tl">1. 지난 회의 액션아이템 점검</p>
+      <ul><li>[ ] …</li></ul>
+      <p class="tl">2. 오늘 안건 (사전 등록 · '문제' 형태로)</p>
+      <ul><li>| # | 안건 | 제안자 | 자료 |</li></ul>
+      <p class="ex">✍️ (나쁨) "강업이 필요합니다" → (좋음) "정책 혼선이 우려됩니다. (방안 몇 개 생각했는데) 어떻게 해결할까요?"</p>
+      <p class="tl">3. 결정사항</p>
+      <ul><li>…</li></ul>
+      <p class="tl">4. 액션아이템</p>
+      <ul><li>[ ] 할 일 — 오너 · 기한</li></ul>
+      <p class="tl">5. 전파</p>
+      <ul><li>[ ] 회의 후 24시간 내 슬랙 공유</li></ul>
+    </div>
+    <div class="actions" style="margin-top:14px"><button class="primary" id="tmpl-close" style="flex:1">닫기</button></div>`;
+  openModal("#kpi-modal");
+  $("#tmpl-close").onclick=()=>closeModal("#kpi-modal");
 }
 function renderMIT(s){
   const f=pickFocus(s); if(!f) return "";
@@ -1041,6 +1083,7 @@ function render(){
   sel.innerHTML=`<option value="">(미지정)</option>`+s.kpis.map(k=>`<option value="${esc(k.id)}">${esc(k.id)} — ${esc(k.title)}</option>`).join("");
   // KPI 카드 클릭 → 상세 모달 / 오늘 수치 버튼
   const mq=$("#kpi-metrics"); if(mq) mq.onclick=(e)=>{ e.stopPropagation(); openQuickMetrics(); };
+  const mt=$("#mtg-tmpl"); if(mt) mt.onclick=(e)=>{ e.stopPropagation(); openMeetingTemplate(); };
   $$("#main .kpi[data-kpi]").forEach(el=>el.onclick=()=>openKpiDetail(el.dataset.kpi));
   // Task 관리: 추가 / 행 클릭 편집
   const addBtn=$("#task-add"); if(addBtn) addBtn.onclick=(e)=>{ e.stopPropagation(); openTaskEdit(null); };
