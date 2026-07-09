@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: auto-deploy 2026-07-04b (library search) -->
+<!-- build: auto-deploy 2026-07-08 (tags: 크립토·바른플랜·GEO·미팅·신규상품·라플레이홈) -->
 <html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📄 문서함 · KPI 비서</title>
@@ -83,12 +83,18 @@ function latestOnly(files){
   files.forEach(f=>{const {stem,ext,ver}=parseName(f.name);const key=stem+"|"+ext;const cur=map.get(key);if(!cur||ver>cur._ver)map.set(key,Object.assign({},f,{_ver:ver}));});
   return [...map.values()];
 }
-// 폴더 없이 주제로 묶기(파일명 키워드 기반)
+// 폴더 없이 주제로 묶기(파일명 키워드 기반 · 구체적인 것부터 먼저)
 function category(name){
+  if(/크립토|예측시장|인게이지|폴리마켓/i.test(name)) return "크립토·예측시장";
+  if(/바른플랜|보험분석/.test(name)) return "바른플랜";
+  if(/타깃데이트|원샷케어|워킹백워드|퍼스트 ?3대/.test(name)) return "신규상품";
+  if(/미팅|회의|프렙|주간|파트리더|준비 노트/.test(name)) return "미팅·회의";
+  if(/GEO|디자이노블/i.test(name)) return "GEO";
+  if(/라플레이 홈|포인트 소진|소진 지표|홈 미니/.test(name)) return "라플레이 홈";
   if(/레쥬메|커리어|resume/i.test(name)) return "커리어";
   if(/논페이드/.test(name)) return "논페이드";
   if(/체험/.test(name)) return "체험";
-  if(/미니|보장성|페르소나|재유입|부검|진단|타깃|POC|목업/.test(name)) return "미니→보장성";
+  if(/미니|보장성|페르소나|재유입|부검|다리놓기|타깃|POC|무료보장진단/.test(name)) return "미니→보장성";
   return "기타";
 }
 async function openDoc(path,name){
