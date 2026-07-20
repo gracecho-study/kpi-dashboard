@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: auto-deploy 2026-07-08 (tags: 크립토·바른플랜·GEO·미팅·신규상품·라플레이홈) -->
+<!-- build: auto-deploy 2026-07-20 (폴더 재편 대응: 하위 폴더 재귀 조회 + 폴더명=카테고리) -->
 <html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📄 문서함 · KPI 비서</title>
@@ -134,8 +134,14 @@ async function load(){
   if(!c.token){$("#main").innerHTML=`<div class="empty">GitHub 토큰이 없어요.<br>대시보드 ⚙ 설정에서 토큰을 넣으면 문서가 보여요.<br><br><a class="btn p" href="index.html">← 대시보드로</a></div>`;return;}
   $("#main").innerHTML=`<div class="center"><span class="spin"></span><div>불러오는 중…</div></div>`;
   try{
-    let files=(await listDir(DOCS_DIR)).filter(f=>f.type==="file" && !/^\./.test(f.name));
-    ALL=latestOnly(files).map(f=>Object.assign(f,{_cat:category(f.name)}));
+    const top=await listDir(DOCS_DIR);
+    const rootFiles=top.filter(f=>f.type==="file" && !/^\./.test(f.name) && f.name!=="INDEX.md");
+    const dirs=top.filter(f=>f.type==="dir");
+    const subLists=await Promise.all(dirs.map(d=>listDir(DOCS_DIR+"/"+d.name)
+      .then(fs=>fs.filter(f=>f.type==="file" && !/^\./.test(f.name)).map(f=>Object.assign(f,{_folder:d.name})))
+      .catch(()=>[])));
+    let files=rootFiles.concat(...subLists);
+    ALL=latestOnly(files).map(f=>Object.assign(f,{_cat:f._folder||category(f.name)}));
     if(!ALL.length){$("#main").innerHTML=`<div class="empty">아직 문서가 없어요.</div>`;return;}
     buildChips(); draw();
   }catch(e){
