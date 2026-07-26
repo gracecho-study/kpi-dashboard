@@ -1,76 +1,100 @@
 <!doctype html>
-<!-- build: auto-deploy 2026-07-20 (폴더 재편 대응: 하위 폴더 재귀 조회 + 폴더명=카테고리) -->
+<!-- build: auto-deploy 2026-07-26 (태그 2축: 주제×종류 / 아카이브 보관함 추가) -->
 <html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📄 문서함 · KPI 비서</title>
 <style>
-  :root{--bg:#0b0f17;--panel:#111726;--panel2:#0e1420;--line:#1e293b;--txt:#e2e8f0;--muted:#94a3b8;--accent:#38bdf8;--bad:#f87171}
+  :root{--bg:#0b0f17;--panel:#111726;--panel2:#0e1420;--line:#1e293b;--txt:#e2e8f0;--muted:#94a3b8;--accent:#38bdf8;--bad:#f87171;--warn:#fbbf24}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--txt);font-family:"Pretendard","Apple SD Gothic Neo",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
   header{position:sticky;top:0;background:rgba(11,15,23,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:14px 16px;z-index:5}
-  .top-row{max-width:900px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  .top-row{max-width:900px;margin:0 auto;display:flex;align-items:center;gap:8px}
   h1{font-size:18px;margin:0;flex:1}
   .sub{font-size:12px;color:var(--muted);margin-top:2px}
-  .icon{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+  .icon{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:8px 11px;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
   .icon:hover{border-color:var(--accent)}
+  .icon.on{border-color:var(--accent);color:var(--accent)}
   .ctrls{max-width:900px;margin:12px auto 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .search{flex:1;min-width:180px;position:relative}
+  .search{flex:1;min-width:170px;position:relative}
   .search input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:9px 12px 9px 32px;font:inherit;font-size:13px}
   .search:before{content:"🔎";position:absolute;left:10px;top:8px;font-size:13px;opacity:.7}
   .sortbtn{background:var(--panel);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:9px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap}
-  .chips{max-width:900px;margin:10px auto 0;display:flex;gap:6px;flex-wrap:wrap}
-  .chip{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer}
+  .sortbtn:hover{border-color:var(--accent)}
+  .chiprow{max-width:900px;margin:9px auto 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .chiplbl{font-size:10.5px;color:var(--muted);flex:0 0 auto;width:30px;letter-spacing:.5px}
+  .chip{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer}
+  .chip .n{font-weight:500;opacity:.65;margin-left:4px}
   .chip.on{background:var(--accent);color:#04222e;border-color:var(--accent)}
+  .chip.on .n{opacity:.8}
+  .chip.k.on{background:#a78bfa;border-color:#a78bfa;color:#1b1233}
   main{max-width:900px;margin:0 auto;padding:16px}
-  .doc-row{display:flex;align-items:center;gap:10px;padding:12px 12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:9px}
+  .bulk{max-width:900px;margin:0 auto 10px;display:flex;justify-content:flex-end}
+  .doc-row{display:flex;align-items:center;gap:10px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:9px}
   .doc-ic{font-size:18px;flex:0 0 auto}
-  .doc-nm{flex:1;font-size:14px;min-width:0;word-break:break-all;line-height:1.45}
-  .doc-cat{font-size:10.5px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-left:8px;white-space:nowrap}
+  .doc-nm{flex:1;font-size:14px;min-width:0;word-break:break-all;line-height:1.5}
+  .tags{display:inline-flex;gap:5px;margin-left:7px;vertical-align:middle}
+  .tag{font-size:10.5px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap}
+  .tag.k{color:#c4b5fd;border-color:#3b2f66}
   .doc-act{display:flex;gap:6px;flex:0 0 auto}
-  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 11px;font-size:13px;cursor:pointer;white-space:nowrap}
   .btn.p{border-color:var(--accent);color:var(--accent)}
+  .btn.d{color:var(--bad)}
   .btn:hover{border-color:var(--accent)}
+  .btn.d:hover{border-color:var(--bad)}
+  .btn[disabled]{opacity:.45;cursor:default}
   .empty,.center{color:var(--muted);text-align:center;padding:44px 16px;line-height:1.6}
+  .note{max-width:900px;margin:0 auto 12px;font-size:12px;color:var(--warn);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:10px;padding:9px 12px;line-height:1.5}
   .spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite}
   @keyframes sp{to{transform:rotate(360deg)}}
-  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;max-width:90vw}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;max-width:90vw;z-index:9}
   .toast.show{opacity:1}
 </style></head>
 <body>
 <header>
   <div class="top-row">
-    <div style="flex:1"><h1>📄 문서함</h1><div class="sub" id="sub">분석·전략 산출물</div></div>
-    <a class="icon" href="index.html">← 대시보드</a>
+    <div style="flex:1"><h1 id="title">📄 문서함</h1><div class="sub" id="sub">분석·전략 산출물</div></div>
+    <button class="icon" id="viewbtn" title="아카이브 보관함">🗄 <span id="viewcnt"></span></button>
+    <a class="icon" href="index.html">←</a>
     <button class="icon" id="refresh" title="새로고침">↻</button>
   </div>
   <div class="ctrls">
     <div class="search"><input id="q" type="search" placeholder="파일명 검색…" autocomplete="off"></div>
-    <button class="sortbtn" id="sort">↕ 이름순</button>
+    <button class="sortbtn" id="sort">↕ 최신순</button>
   </div>
-  <div class="chips" id="chips"></div>
+  <div class="chiprow" id="chips-cat"></div>
+  <div class="chiprow" id="chips-kind"></div>
 </header>
+<div id="note"></div>
+<div class="bulk" id="bulk"></div>
 <main id="main"><div class="center"><span class="spin"></span><div>불러오는 중…</div></div></main>
 <div class="toast" id="toast"></div>
 <script>
 "use strict";
 const LS_KEY="kpi-dash-cfg";
+const LS_ARCH="kpi-doc-archive";
 const DEFAULTS={token:"",owner:"gracecho-study",repo:"2020-study",branch:"claude/dreamy-bell-nwgcly"};
 const DOCS_DIR="assistant/docs";
+const ARCH_FILE="assistant/docs/.archive.json";
 function getCfg(){try{return Object.assign({},DEFAULTS,JSON.parse(localStorage.getItem(LS_KEY)||"{}"));}catch(e){return Object.assign({},DEFAULTS);}}
 const $=s=>document.querySelector(s);
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));}
-function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2600);}
-function b64DecodeUtf8(b64){const bin=atob((b64||"").replace(/\s/g,""));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder("utf-8").decode(b);}
-async function gh(path){
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),2800);}
+function b64dec(b64){const bin=atob((b64||"").replace(/\s/g,""));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return new TextDecoder("utf-8").decode(b);}
+function b64enc(str){const b=new TextEncoder().encode(str);let s="";for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+
+async function gh(path,opts={}){
   const c=getCfg();
   if(!c.token){const e=new Error("토큰 없음");e.code="NOTOKEN";throw e;}
-  const res=await fetch(`https://api.github.com/repos/${c.owner}/${c.repo}/${path}`,{headers:{
-    "Authorization":`Bearer ${c.token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}});
-  if(!res.ok){let b="";try{b=(await res.json()).message||"";}catch(_){} const e=new Error(`GitHub ${res.status} ${b}`);e.status=res.status;throw e;}
-  return res.json();
+  const r=await fetch(`https://api.github.com/repos/${c.owner}/${c.repo}/${path}`,{...opts,headers:{
+    "Authorization":`Bearer ${c.token}`,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28",...(opts.headers||{})}});
+  if(!r.ok){let b="";try{b=(await r.json()).message||"";}catch(_){}
+    const e=new Error(`GitHub ${r.status} ${b}`);e.status=r.status;throw e;}
+  return r.status===204?null:r.json();
 }
 async function listDir(dir){const c=getCfg();try{const d=await gh(`contents/${encodeURI(dir)}?ref=${encodeURIComponent(c.branch)}`);return Array.isArray(d)?d:[];}catch(e){if(e.status===404)return[];throw e;}}
-async function getFile(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);return b64DecodeUtf8(d.content);}
+async function getFile(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);return b64dec(d.content);}
+
+/* ───── 파일명 파싱 · 그룹핑(버전 묶음) ───── */
 function parseName(name){
   const dot=name.lastIndexOf(".");
   const ext=dot>=0?name.slice(dot):"";
@@ -78,25 +102,96 @@ function parseName(name){
   const m=base.match(/^(.*?)[ _]*[vV](\d+)$/);
   return {stem:m?m[1].replace(/[ _]+$/,""):base, ext, ver:m?parseInt(m[2],10):0};
 }
-function latestOnly(files){
+// 같은 문서의 v1~vN을 한 묶음으로. 대표는 최신 버전, files에는 전 버전 보관(아카이브·삭제 대상)
+function group(files){
   const map=new Map();
-  files.forEach(f=>{const {stem,ext,ver}=parseName(f.name);const key=stem+"|"+ext;const cur=map.get(key);if(!cur||ver>cur._ver)map.set(key,Object.assign({},f,{_ver:ver}));});
+  files.forEach(f=>{
+    const {stem,ext,ver}=parseName(f.name);
+    const folder=f._folder||"";
+    const key=`${folder}|${stem}|${ext}`;
+    let g=map.get(key);
+    if(!g){g={key,folder,stem,ext,name:f.name,path:f.path,ver,files:[]};map.set(key,g);}
+    g.files.push(f);
+    if(ver>=g.ver){g.ver=ver;g.name=f.name;g.path=f.path;}
+  });
   return [...map.values()];
 }
-// 폴더 없이 주제로 묶기(파일명 키워드 기반 · 구체적인 것부터 먼저)
-function category(name){
-  if(/크립토|예측시장|인게이지|폴리마켓/i.test(name)) return "크립토·예측시장";
+
+/* ───── 태그 1: 주제(폴더) ───── */
+function category(name){ // 폴더 밖 파일용 대체 규칙
+  if(/크립토|예측시장|인게이지|폴리마켓|위플레이/i.test(name)) return "위플레이-크립토";
   if(/바른플랜|보험분석/.test(name)) return "바른플랜";
-  if(/타깃데이트|원샷케어|워킹백워드|퍼스트 ?3대/.test(name)) return "신규상품";
-  if(/미팅|회의|프렙|주간|파트리더|준비 노트/.test(name)) return "미팅·회의";
-  if(/GEO|디자이노블/i.test(name)) return "GEO";
-  if(/라플레이 홈|포인트 소진|소진 지표|홈 미니/.test(name)) return "라플레이 홈";
-  if(/레쥬메|커리어|resume/i.test(name)) return "커리어";
-  if(/논페이드/.test(name)) return "논페이드";
-  if(/체험/.test(name)) return "체험";
-  if(/미니|보장성|페르소나|재유입|부검|다리놓기|타깃|POC|무료보장진단/.test(name)) return "미니→보장성";
+  if(/타깃데이트|원샷케어|워킹백워드|퍼스트 ?3대|라이프핏|신규상품/.test(name)) return "신규상품";
+  if(/라플피드|콘텐츠|포인트 소진/.test(name)) return "라플피드-콘텐츠";
+  if(/PPDTR|건강탭|플라이휠|프로덕트 원칙/.test(name)) return "PPDTR-건강전략";
+  if(/광고|모객|논페이드|MMP|에어브릿지|회원확대/.test(name)) return "모객-광고";
+  if(/미니|보장성|청약|페르소나|재유입|부검|다리놓기/.test(name)) return "미니보험-전환";
+  if(/Aktivo/i.test(name)) return "Aktivo";
+  return "보고-미팅-기타";
+}
+
+/* ───── 태그 2: 종류 (구체적인 것부터) ───── */
+function kind(name){
+  const n=name;
+  if(/실증연구|리서치|사례|레퍼런스|벤치마킹|스터디|외부근거|롱리스트|세션정리|총정리|현장 ?세션|청취 ?가이드|교차검증/.test(n)) return "근거·리서치";
+  if(/UT|체험|설문|페르소나|부검|분석|지표|시나리오|체크리스트|사분면|실사표|가설|검증|퍼널 ?데이터|로그|평가 ?프레임|OMTM/.test(n)) return "분석·검증";
+  if(/목업|화면개선|시안|다이어그램|이미지|As-?Is|퍼널맵|구조도|뉴스기사|FAQ/i.test(n)) return "목업·시안";
+  if(/\.pptx$|장표|올핸즈|공유|위키|게시본|주간|회의|미팅|프렙|준비 ?노트|보고|파트리더|자료$/.test(n)) return "발표·회의";
+  if(/기획서|설계|원페이|제안|개선안|방향|전략|컨셉|로드맵|플랜|계획서|맵|원칙|검토|아이데이션|아이디어|방안|POC|액션|플라이휠|다리놓기|초안|이슈|필요성|정리$/.test(n)) return "기획·전략";
   return "기타";
 }
+const KIND_ORDER=["기획·전략","분석·검증","근거·리서치","목업·시안","발표·회의","기타"];
+
+/* ───── 아카이브 상태 (repo의 .archive.json = 기기 공유) ───── */
+let ARCH=new Set(), ARCH_SHA=null, ARCH_LOCAL=false;
+function readLocalArch(){try{return new Set(JSON.parse(localStorage.getItem(LS_ARCH)||"[]"));}catch(e){return new Set();}}
+async function loadArchive(){
+  const c=getCfg();
+  try{
+    const d=await gh(`contents/${encodeURI(ARCH_FILE)}?ref=${encodeURIComponent(c.branch)}`);
+    ARCH_SHA=d.sha;
+    const j=JSON.parse(b64dec(d.content)||"{}");
+    ARCH=new Set(j.keys||[]); ARCH_LOCAL=false;
+    localStorage.setItem(LS_ARCH,JSON.stringify([...ARCH]));
+  }catch(e){
+    if(e.status===404){ARCH=readLocalArch();ARCH_SHA=null;ARCH_LOCAL=ARCH.size>0;}
+    else {ARCH=readLocalArch();ARCH_LOCAL=true;}
+  }
+}
+async function saveArchive(){
+  localStorage.setItem(LS_ARCH,JSON.stringify([...ARCH]));
+  const c=getCfg();
+  const body=JSON.stringify({note:"문서함에서 숨긴 문서 목록. keys = 폴더|제목|확장자",keys:[...ARCH].sort()},null,1);
+  for(let i=0;i<2;i++){
+    try{
+      const payload={message:"docs: 문서함 아카이브 갱신",content:b64enc(body),branch:c.branch};
+      if(ARCH_SHA)payload.sha=ARCH_SHA;
+      const r=await gh(`contents/${encodeURI(ARCH_FILE)}`,{method:"PUT",body:JSON.stringify(payload)});
+      ARCH_SHA=(r&&r.content&&r.content.sha)||null; ARCH_LOCAL=false; return true;
+    }catch(e){
+      if((e.status===409||e.status===422)&&i===0){
+        try{const d=await gh(`contents/${encodeURI(ARCH_FILE)}?ref=${encodeURIComponent(c.branch)}`);ARCH_SHA=d.sha;}catch(_){ARCH_SHA=null;}
+        continue;
+      }
+      ARCH_LOCAL=true; toast("이 기기에만 저장됨 — 토큰에 쓰기 권한이 필요해요");
+      return false;
+    }
+  }
+  ARCH_LOCAL=true; return false;
+}
+async function delGroup(g){
+  const c=getCfg();
+  for(const f of g.files){
+    try{
+      let sha=f.sha;
+      if(!sha){const d=await gh(`contents/${encodeURI(f.path)}?ref=${encodeURIComponent(c.branch)}`);sha=d.sha;}
+      await gh(`contents/${encodeURI(f.path)}`,{method:"DELETE",body:JSON.stringify({message:`docs: ${f.name} 삭제`,sha,branch:c.branch})});
+    }catch(e){toast("삭제 실패: "+(e.message||e));return false;}
+  }
+  return true;
+}
+
+/* ───── 열기 · 저장 ───── */
 async function openDoc(path,name){
   try{const text=await getFile(path);const blob=new Blob([text],{type:/\.html?$/i.test(name)?"text/html;charset=utf-8":"text/plain;charset=utf-8"});
     const url=URL.createObjectURL(blob);window.open(url,"_blank");setTimeout(()=>URL.revokeObjectURL(url),60000);
@@ -107,41 +202,100 @@ async function downloadDoc(path,name){
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }catch(e){toast("다운로드 실패: "+(e.message||e));}
 }
-let ALL=[], CAT="전체", SORT="name"; // name | recent
-function draw(){
+
+/* ───── 렌더 ───── */
+let ALL=[], CAT="전체", KIND="전체", SORT="recent", VIEW="live"; // live | arch
+const dnum=n=>{const m=/^(\d{8})/.exec(n);return m?m[1]:"00000000";};
+function scope(){return ALL.filter(g=>VIEW==="arch" ? ARCH.has(g.key) : !ARCH.has(g.key));}
+function filtered(){
   const q=($("#q").value||"").trim().toLowerCase();
-  let list=ALL.filter(f=>(CAT==="전체"||f._cat===CAT) && (!q||f.name.toLowerCase().includes(q)));
-  list.sort((a,b)=> SORT==="name" ? a.name.localeCompare(b.name,"ko") : b.name.localeCompare(a.name,"ko"));
-  $("#sub").textContent=`${list.length}개${q||CAT!=="전체"?" (필터됨)":""} · 최신 버전만`;
-  if(!list.length){$("#main").innerHTML=`<div class="empty">조건에 맞는 문서가 없어요.</div>`;return;}
-  $("#main").innerHTML=list.map(f=>{
-    const html=/\.html?$/i.test(f.name);
-    const p=encodeURIComponent(f.path), n=encodeURIComponent(f.name);
+  let list=scope().filter(g=>(CAT==="전체"||g._cat===CAT)&&(KIND==="전체"||g._kind===KIND)&&(!q||g.name.toLowerCase().includes(q)));
+  list.sort((a,b)=> SORT==="recent"
+    ? (dnum(b.name).localeCompare(dnum(a.name))||a.name.localeCompare(b.name,"ko"))
+    : a.name.localeCompare(b.name,"ko"));
+  return list;
+}
+function draw(){
+  const list=filtered(), archN=ALL.filter(g=>ARCH.has(g.key)).length;
+  const filterOn=!!($("#q").value||"").trim()||CAT!=="전체"||KIND!=="전체";
+  $("#title").textContent=VIEW==="arch"?"🗄 아카이브":"📄 문서함";
+  $("#viewbtn").className="icon"+(VIEW==="arch"?" on":"");
+  $("#viewbtn").innerHTML=VIEW==="arch"?"📄 문서함":"🗄 <span id=\"viewcnt\">"+archN+"</span>";
+  $("#sub").textContent=VIEW==="arch"
+    ? `보관 ${list.length}개${filterOn?" (필터됨)":""}`
+    : `${list.length}개${filterOn?" (필터됨)":""} · 최신 버전만 · 보관 ${archN}`;
+  $("#note").innerHTML=ARCH_LOCAL?`<div class="note">아카이브가 이 기기에만 저장되고 있어요. 다른 기기와 맞추려면 설정의 토큰에 쓰기(Contents: Read and write) 권한이 필요해요.</div>`:"";
+
+  $("#bulk").innerHTML = (VIEW==="live"&&filterOn&&list.length)
+    ? `<button class="btn" id="bulkarch">🗄 보이는 ${list.length}개 아카이브</button>` : "";
+  const ba=$("#bulkarch");
+  if(ba)ba.onclick=async()=>{
+    if(!confirm(`지금 보이는 ${list.length}개를 아카이브로 보낼까요?\n(파일은 지워지지 않고 목록에서만 빠집니다)`))return;
+    list.forEach(g=>ARCH.add(g.key)); await saveArchive(); buildChips(); draw(); toast(`${list.length}개 아카이브`);
+  };
+
+  if(!list.length){
+    $("#main").innerHTML=`<div class="empty">${VIEW==="arch"?"아카이브가 비어 있어요.":"조건에 맞는 문서가 없어요."}</div>`;
+    return;
+  }
+  $("#main").innerHTML=list.map(g=>{
+    const html=/\.html?$/i.test(g.name);
+    const k=encodeURIComponent(g.key), p=encodeURIComponent(g.path), n=encodeURIComponent(g.name);
+    const vers=g.files.length>1?`<span class="tag">v${g.ver}·${g.files.length}개</span>`:"";
+    const act = VIEW==="arch"
+      ? `<button class="btn p" data-un="${k}">↩ 복원</button><button class="btn d" data-del="${k}">🗑</button>`
+      : `${html?`<button class="btn p" data-open="${p}" data-name="${n}">열기</button>`:""}<button class="btn" data-dl="${p}" data-name="${n}">⬇</button><button class="btn" data-arch="${k}" title="아카이브">🗄</button>`;
     return `<div class="doc-row"><span class="doc-ic">${html?"🌐":"📄"}</span>
-      <span class="doc-nm">${esc(f.name)}<span class="doc-cat">${esc(f._cat)}</span></span>
-      <span class="doc-act">${html?`<button class="btn p" data-open="${p}" data-name="${n}">열기</button>`:""}<button class="btn" data-dl="${p}" data-name="${n}">⬇ 저장</button></span></div>`;
+      <span class="doc-nm">${esc(g.name)}<span class="tags"><span class="tag">${esc(g._cat)}</span><span class="tag k">${esc(g._kind)}</span>${vers}</span></span>
+      <span class="doc-act">${act}</span></div>`;
   }).join("");
+
   document.querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>openDoc(decodeURIComponent(el.dataset.open),decodeURIComponent(el.dataset.name)));
   document.querySelectorAll("[data-dl]").forEach(el=>el.onclick=()=>downloadDoc(decodeURIComponent(el.dataset.dl),decodeURIComponent(el.dataset.name)));
+  document.querySelectorAll("[data-arch]").forEach(el=>el.onclick=async()=>{
+    ARCH.add(decodeURIComponent(el.dataset.arch)); await saveArchive(); buildChips(); draw(); toast("아카이브로 보냈어요");
+  });
+  document.querySelectorAll("[data-un]").forEach(el=>el.onclick=async()=>{
+    ARCH.delete(decodeURIComponent(el.dataset.un)); await saveArchive(); buildChips(); draw(); toast("문서함으로 복원");
+  });
+  document.querySelectorAll("[data-del]").forEach(el=>el.onclick=async()=>{
+    const key=decodeURIComponent(el.dataset.del), g=ALL.find(x=>x.key===key); if(!g)return;
+    if(!confirm(`${g.stem}\n전 버전 ${g.files.length}개 파일을 저장소에서 완전히 지웁니다. 되돌릴 수 없어요.\n삭제할까요?`))return;
+    el.disabled=true; el.textContent="…";
+    if(await delGroup(g)){ARCH.delete(key);await saveArchive();toast("삭제됨");await load();}
+    else {el.disabled=false;el.textContent="🗑";}
+  });
+}
+function chipHTML(list,cur,cls){
+  return list.map(([c,n])=>`<span class="chip ${cls}${c===cur?" on":""}" data-v="${esc(c)}">${esc(c)}${n!=null?`<span class="n">${n}</span>`:""}</span>`).join("");
 }
 function buildChips(){
-  const cats=["전체",...[...new Set(ALL.map(f=>f._cat))].sort((a,b)=>a==="기타"?1:b==="기타"?-1:a.localeCompare(b,"ko"))];
-  $("#chips").innerHTML=cats.map(c=>`<span class="chip${c===CAT?" on":""}" data-cat="${esc(c)}">${esc(c)}</span>`).join("");
-  document.querySelectorAll("#chips .chip").forEach(el=>el.onclick=()=>{CAT=el.dataset.cat;buildChips();draw();});
+  const S=scope();
+  const catCount=new Map(), kindCount=new Map();
+  S.forEach(g=>{catCount.set(g._cat,(catCount.get(g._cat)||0)+1);kindCount.set(g._kind,(kindCount.get(g._kind)||0)+1);});
+  if(!catCount.has(CAT))CAT="전체";
+  if(!kindCount.has(KIND))KIND="전체";
+  const cats=[["전체",S.length],...[...catCount.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],"ko"))];
+  const kinds=[["전체",S.length],...KIND_ORDER.filter(k=>kindCount.has(k)).map(k=>[k,kindCount.get(k)])];
+  $("#chips-cat").innerHTML=`<span class="chiplbl">주제</span>`+chipHTML(cats,CAT,"c");
+  $("#chips-kind").innerHTML=`<span class="chiplbl">종류</span>`+chipHTML(kinds,KIND,"k");
+  document.querySelectorAll("#chips-cat .chip").forEach(el=>el.onclick=()=>{CAT=el.dataset.v;buildChips();draw();});
+  document.querySelectorAll("#chips-kind .chip").forEach(el=>el.onclick=()=>{KIND=el.dataset.v;buildChips();draw();});
 }
 async function load(){
   const c=getCfg();
   if(!c.token){$("#main").innerHTML=`<div class="empty">GitHub 토큰이 없어요.<br>대시보드 ⚙ 설정에서 토큰을 넣으면 문서가 보여요.<br><br><a class="btn p" href="index.html">← 대시보드로</a></div>`;return;}
   $("#main").innerHTML=`<div class="center"><span class="spin"></span><div>불러오는 중…</div></div>`;
   try{
+    await loadArchive();
     const top=await listDir(DOCS_DIR);
     const rootFiles=top.filter(f=>f.type==="file" && !/^\./.test(f.name) && f.name!=="INDEX.md");
     const dirs=top.filter(f=>f.type==="dir");
     const subLists=await Promise.all(dirs.map(d=>listDir(DOCS_DIR+"/"+d.name)
       .then(fs=>fs.filter(f=>f.type==="file" && !/^\./.test(f.name)).map(f=>Object.assign(f,{_folder:d.name})))
       .catch(()=>[])));
-    let files=rootFiles.concat(...subLists);
-    ALL=latestOnly(files).map(f=>Object.assign(f,{_cat:f._folder||category(f.name)}));
+    const files=rootFiles.concat(...subLists);
+    ALL=group(files).map(g=>Object.assign(g,{_cat:g.folder||category(g.name),_kind:kind(g.name)}));
     if(!ALL.length){$("#main").innerHTML=`<div class="empty">아직 문서가 없어요.</div>`;return;}
     buildChips(); draw();
   }catch(e){
@@ -149,7 +303,8 @@ async function load(){
   }
 }
 $("#q").addEventListener("input",draw);
-$("#sort").onclick=()=>{ SORT=SORT==="name"?"recent":"name"; $("#sort").textContent=SORT==="name"?"↕ 이름순":"↕ 최신순"; draw(); };
+$("#sort").onclick=()=>{SORT=SORT==="recent"?"name":"recent";$("#sort").textContent=SORT==="recent"?"↕ 최신순":"↕ 이름순";draw();};
+$("#viewbtn").onclick=()=>{VIEW=VIEW==="live"?"arch":"live";CAT="전체";KIND="전체";buildChips();draw();};
 $("#refresh").onclick=load;
 load();
 </script>
