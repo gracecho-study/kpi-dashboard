@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: auto-deploy 2026-07-26 (태그 2축: 주제×종류 / 아카이브 보관함 추가) -->
+<!-- build: auto-deploy 2026-07-27 (바이너리 다운로드 깨짐 수정: pptx·pdf·png는 바이트 그대로) -->
 <html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📄 문서함 · KPI 비서</title>
@@ -93,6 +93,12 @@ async function gh(path,opts={}){
 }
 async function listDir(dir){const c=getCfg();try{const d=await gh(`contents/${encodeURI(dir)}?ref=${encodeURIComponent(c.branch)}`);return Array.isArray(d)?d:[];}catch(e){if(e.status===404)return[];throw e;}}
 async function getFile(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);return b64dec(d.content);}
+// 바이너리(pptx·pdf·png·xlsx…)는 UTF-8로 디코드하면 깨진다. 원본 바이트 그대로 반환.
+function b64bytes(b64){const bin=atob((b64||"").replace(/\s/g,""));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b;}
+async function getFileBytes(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);
+  if(d.content) return b64bytes(d.content);
+  const r=await fetch(d.download_url); if(!r.ok) throw new Error("다운로드 실패 "+r.status);
+  return new Uint8Array(await r.arrayBuffer());}
 
 /* ───── 파일명 파싱 · 그룹핑(버전 묶음) ───── */
 function parseName(name){
@@ -198,7 +204,7 @@ async function openDoc(path,name){
   }catch(e){toast("열기 실패: "+(e.message||e));}
 }
 async function downloadDoc(path,name){
-  try{const text=await getFile(path);const blob=new Blob([text],{type:"application/octet-stream"});
+  try{const bytes=await getFileBytes(path);const blob=new Blob([bytes],{type:"application/octet-stream"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
   }catch(e){toast("다운로드 실패: "+(e.message||e));}
 }
