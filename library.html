@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- build: auto-deploy 2026-07-27 (바이너리 다운로드 깨짐 수정: pptx·pdf·png는 바이트 그대로) -->
+<!-- build: auto-deploy 2026-08-01 (MD 파일에 GitHub 보기·편집 링크 추가 — 다운로드 없이 바로 수정) -->
 <html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>📄 문서함 · KPI 비서</title>
@@ -39,6 +39,7 @@
   .btn{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:7px 11px;font-size:13px;cursor:pointer;white-space:nowrap}
   .btn.p{border-color:var(--accent);color:var(--accent)}
   .btn.d{color:var(--bad)}
+  a.btn{text-decoration:none;display:inline-flex;align-items:center}
   .btn:hover{border-color:var(--accent)}
   .btn.d:hover{border-color:var(--bad)}
   .btn[disabled]{opacity:.45;cursor:default}
@@ -197,6 +198,14 @@ async function delGroup(g){
   return true;
 }
 
+/* ───── GitHub 링크 (다운로드 없이 웹에서 바로 보기·편집) ───── */
+// mode: "blob"=렌더된 보기 / "edit"=웹 편집기. 브랜치명의 "/"는 그대로 두고 경로만 세그먼트별 인코딩.
+function ghUrl(path,mode){
+  const c=getCfg();
+  const p=String(path).split("/").map(encodeURIComponent).join("/");
+  return `https://github.com/${c.owner}/${c.repo}/${mode}/${c.branch}/${p}`;
+}
+
 /* ───── 열기 · 저장 ───── */
 async function openDoc(path,name){
   try{const text=await getFile(path);const blob=new Blob([text],{type:/\.html?$/i.test(name)?"text/html;charset=utf-8":"text/plain;charset=utf-8"});
@@ -245,12 +254,16 @@ function draw(){
     return;
   }
   $("#main").innerHTML=list.map(g=>{
-    const html=/\.html?$/i.test(g.name);
+    const html=/\.html?$/i.test(g.name), md=/\.md$/i.test(g.name);
     const k=encodeURIComponent(g.key), p=encodeURIComponent(g.path), n=encodeURIComponent(g.name);
     const vers=g.files.length>1?`<span class="tag">v${g.ver}·${g.files.length}개</span>`:"";
+    const gh = md
+      ? `<a class="btn" href="${esc(ghUrl(g.path,"blob"))}" target="_blank" rel="noopener" title="GitHub에서 보기">📖</a>`
+       +`<a class="btn p" href="${esc(ghUrl(g.path,"edit"))}" target="_blank" rel="noopener" title="GitHub에서 바로 편집">✏️</a>`
+      : "";
     const act = VIEW==="arch"
       ? `<button class="btn p" data-un="${k}">↩ 복원</button><button class="btn d" data-del="${k}">🗑</button>`
-      : `${html?`<button class="btn p" data-open="${p}" data-name="${n}">열기</button>`:""}<button class="btn" data-dl="${p}" data-name="${n}">⬇</button><button class="btn" data-arch="${k}" title="아카이브">🗄</button>`;
+      : `${html?`<button class="btn p" data-open="${p}" data-name="${n}">열기</button>`:""}${gh}<button class="btn" data-dl="${p}" data-name="${n}">⬇</button><button class="btn" data-arch="${k}" title="아카이브">🗄</button>`;
     return `<div class="doc-row"><span class="doc-ic">${html?"🌐":"📄"}</span>
       <span class="doc-nm">${esc(g.name)}<span class="tags"><span class="tag">${esc(g._cat)}</span><span class="tag k">${esc(g._kind)}</span>${vers}</span></span>
       <span class="doc-act">${act}</span></div>`;
