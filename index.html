@@ -76,7 +76,8 @@
   ul.clean li:last-child{border-bottom:0}
   .empty{color:var(--muted); font-size:13px; padding:8px 0}
   .alert{border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:10px; border:1px solid}
-  .alert.warn{background:rgba(251,191,36,.08); border-color:var(--warn); color:#fde68a}
+  .alert.ok{background:#e8f6ee;color:#146c43}
+.alert.warn{background:rgba(251,191,36,.08); border-color:var(--warn); color:#fde68a}
   .alert.bad{background:rgba(248,113,113,.08); border-color:var(--bad); color:#fca5a5}
   .alert.good{background:rgba(52,211,153,.08); border-color:var(--good); color:#a7f3d0}
   .warns{margin-bottom:16px}
@@ -628,9 +629,15 @@ function renderWarnings(s){
   const a=[];
   const dd=daysUntil(s.cfg.next_retro_due);
   if(dd!=null && dd<=2) a.push(`<div class="alert ${dd<0?"bad":"warn"}">📝 회고 ${dd<0?`${-dd}일 지남`:dd===0?"오늘":`D-${dd}`} (${s.cfg.next_retro_due}). "회고"라고 말해 진행하세요.</div>`);
-  const doing = s.today?.doing?.length || (s.weekly?.rows||[]).filter(r=>/진행/.test(r.status)).length;
+  // WIP = 티켓 status:doing 중 owner가 본인인 것만. 남이 실행하는 티켓은 내 부하가 아니다.
+  const mine  = (s.tickets||[]).filter(t=>t.status==="doing" && /본인/.test(t.owner||""));
+  const other = (s.tickets||[]).filter(t=>t.status==="doing" && !/본인/.test(t.owner||""));
+  const doing = mine.length;
   if(s.cfg.weekly_wip_limit && doing>s.cfg.weekly_wip_limit)
     a.push(`<div class="alert warn">⚠️ 진행중 업무 ${doing}개 — WIP 한도(${s.cfg.weekly_wip_limit}) 초과.</div>`);
+  else if(doing)
+    a.push(`<div class="alert ok">🟢 진행중 ${doing}개 / 한도 ${s.cfg.weekly_wip_limit}`
+      + (other.length?` <span style="opacity:.7">(타인 오너 ${other.length}건은 제외)</span>`:"") + `</div>`);
   if(s.ratio.has){
     const tot=s.ratio.p+s.ratio.r, pr=tot?s.ratio.p/tot:0, tgt=s.cfg.target_proactive_ratio;
     if(tgt && pr<tgt) a.push(`<div class="alert bad">🔻 proactive 비중 ${(pr*100).toFixed(0)}% &lt; 목표 ${(tgt*100).toFixed(0)}%. f/up에 매몰되는 중 — 내 임팩트 업무 시간을 확보하세요.</div>`);
@@ -684,8 +691,11 @@ function meetingsOn(sch, d){
   if(!sch) return [];
   const dow="일월화수목금토"[d.getDay()], iso=localISO(d);
   const list=[];
-  sch.recurring.forEach(m=>{ if(m.dow===dow) list.push(m); });
-  sch.oneoff.forEach(m=>{ if(m.date===iso) list.push(m); });
+  const ones = sch.oneoff.filter(m=>m.date===iso);
+  // 단발 제목에 '대체'가 있으면 그날 정기 미팅은 숨긴다 (워크숍이 정기미팅을 갈음하는 경우)
+  const replaces = ones.some(m=>/대체/.test(m.title));
+  if(!replaces) sch.recurring.forEach(m=>{ if(m.dow===dow) list.push(m); });
+  ones.forEach(m=>list.push(m));
   return list.sort((a,b)=> a.time<b.time?-1:1);
 }
 function needsPrep(m){ return !!m.prep && m.prep.trim()!=="" && !/^\s*(없음|없슴|-|해당\s*없음)/.test(m.prep); }
