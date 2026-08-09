@@ -94,7 +94,12 @@ async function gh(path,opts={}){
   return r.status===204?null:r.json();
 }
 async function listDir(dir){const c=getCfg();try{const d=await gh(`contents/${encodeURI(dir)}?ref=${encodeURIComponent(c.branch)}`);return Array.isArray(d)?d:[];}catch(e){if(e.status===404)return[];throw e;}}
-async function getFile(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);return b64dec(d.content);}
+// 1MB 넘는 파일은 contents API가 본문을 비워서 준다(encoding:"none"). 그때는 download_url로 받는다.
+async function getFile(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);
+  if(d.content) return b64dec(d.content);
+  if(!d.download_url) throw new Error("파일이 너무 커서 못 불러왔어요");
+  const r=await fetch(d.download_url); if(!r.ok) throw new Error("불러오기 실패 "+r.status);
+  return new TextDecoder("utf-8").decode(await r.arrayBuffer());}
 // 바이너리(pptx·pdf·png·xlsx…)는 UTF-8로 디코드하면 깨진다. 원본 바이트 그대로 반환.
 function b64bytes(b64){const bin=atob((b64||"").replace(/\s/g,""));const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b;}
 async function getFileBytes(p){const c=getCfg();const d=await gh(`contents/${encodeURI(p)}?ref=${encodeURIComponent(c.branch)}`);
