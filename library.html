@@ -249,13 +249,22 @@ async function downloadDoc(path,name){
 
 /* ───── 렌더 ───── */
 let ALL=[], CAT="전체", KIND="전체", SORT="recent", VIEW="live"; // live | arch
+let MT={}; // 파일별 마지막 커밋 시각 (assistant/docs/.mtimes.json, update-mtimes.yml이 갱신)
 const dnum=n=>{const m=/^(\d{8})/.exec(n);return m?m[1]:"00000000";};
+// 최신순 키: 실제 수정일(ISO) 우선, 없으면 파일명 날짜로 대체. ISO 문자열이라 사전순 비교 가능
+const mkey=g=>{
+  let best="";
+  g.files.forEach(f=>{const rel=(f._folder?f._folder+"/":"")+f.name;const t=MT[rel]||"";if(t>best)best=t;});
+  if(best)return best;
+  const d=dnum(g.name);
+  return d.slice(0,4)+"-"+d.slice(4,6)+"-"+d.slice(6,8);
+};
 function scope(){return ALL.filter(g=>VIEW==="arch" ? ARCH.has(g.key) : !ARCH.has(g.key));}
 function filtered(){
   const q=($("#q").value||"").trim().toLowerCase();
   let list=scope().filter(g=>(CAT==="전체"||g._cat===CAT)&&(KIND==="전체"||g._kind===KIND)&&(!q||g.name.toLowerCase().includes(q)));
   list.sort((a,b)=> SORT==="recent"
-    ? (dnum(b.name).localeCompare(dnum(a.name))||a.name.localeCompare(b.name,"ko"))
+    ? (mkey(b).localeCompare(mkey(a))||a.name.localeCompare(b.name,"ko"))
     : a.name.localeCompare(b.name,"ko"));
   return list;
 }
@@ -286,6 +295,11 @@ function draw(){
     const html=/\.html?$/i.test(g.name), md=/\.md$/i.test(g.name);
     const k=encodeURIComponent(g.key), p=encodeURIComponent(g.path), n=encodeURIComponent(g.name);
     const vers=g.files.length>1?`<span class="tag">v${g.ver}·${g.files.length}개</span>`:"";
+    // 파일명 날짜 이후에 고쳐진 문서는 수정일을 보여줘 최신순 위치를 설명한다
+    const iso=mkey(g), fd=dnum(g.name);
+    let mt=iso.slice(0,10);
+    if(iso.includes("T")){const t=new Date(iso);mt=t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0");}
+    const upd=(mt>fd.slice(0,4)+"-"+fd.slice(4,6)+"-"+fd.slice(6,8))?`<span class="tag">수정 ${+mt.slice(5,7)}/${+mt.slice(8,10)}</span>`:"";
     const ghbtn = md
       ? `<a class="btn" href="${esc(ghUrl(g.path,"blob"))}" target="_blank" rel="noopener" title="GitHub에서 보기">📖</a>`
        +`<a class="btn p" href="${esc(ghUrl(g.path,"edit"))}" target="_blank" rel="noopener" title="GitHub에서 바로 편집">✏️</a>`
@@ -295,7 +309,7 @@ function draw(){
       ? `<button class="btn p" data-un="${k}">↩ 복원</button><button class="btn d" data-del="${k}">🗑</button>`
       : `${html?`<button class="btn p" data-open="${p}" data-name="${n}">열기</button>`:""}${ghbtn}<button class="btn" data-dl="${p}" data-name="${n}">⬇</button><button class="btn" data-arch="${k}" title="아카이브">🗄</button>`;
     return `<div class="doc-row"><span class="doc-ic">${html?"🌐":"📄"}</span>
-      <span class="doc-nm">${esc(g.name)}<span class="tags"><span class="tag">${esc(g._cat)}</span><span class="tag k">${esc(g._kind)}</span>${vers}</span></span>
+      <span class="doc-nm">${esc(g.name)}<span class="tags"><span class="tag">${esc(g._cat)}</span><span class="tag k">${esc(g._kind)}</span>${vers}${upd}</span></span>
       <span class="doc-act">${act}</span></div>`;
   }).join("");
 
@@ -339,6 +353,7 @@ async function load(){
   $("#main").innerHTML=`<div class="center"><span class="spin"></span><div>불러오는 중…</div></div>`;
   try{
     await loadArchive();
+    try{MT=JSON.parse(await getFile(DOCS_DIR+"/.mtimes.json")).paths||{};}catch(e){MT={};}
     const top=await listDir(DOCS_DIR);
     const rootFiles=top.filter(f=>f.type==="file" && !/^\./.test(f.name) && f.name!=="INDEX.md");
     const dirs=top.filter(f=>f.type==="dir");
